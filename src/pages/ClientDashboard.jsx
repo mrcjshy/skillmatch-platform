@@ -1,23 +1,17 @@
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
 
 function ClientDashboard() {
-  const navigate = useNavigate()
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    navigate('/')
-  }
+  const { profile, signOut } = useAuth()
 
   return (
     <div style={{ padding: '2rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Client Dashboard</h1>
-        <button onClick={handleLogout} style={logoutStyle}>
+        <button onClick={signOut} style={logoutStyle}>
           Logout
         </button>
       </div>
-      <p>Welcome, Client! You can post jobs and find workers here.</p>
+      <p>Welcome, {profile?.full_name || 'Client'}! You can post jobs and find workers here.</p>
     </div>
   )
 }
@@ -28,7 +22,7 @@ const logoutStyle = {
   color: 'white',
   border: 'none',
   borderRadius: '4px',
-
+  cursor: 'pointer'
 }
 
 export default ClientDashboard

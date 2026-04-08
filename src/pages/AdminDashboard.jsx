@@ -1,23 +1,17 @@
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
+import { useAuth } from '../context/AuthContext'
 
 function AdminDashboard() {
-  const navigate = useNavigate()
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    navigate('/')
-  }
+  const { profile, signOut } = useAuth()
 
   return (
     <div style={{ padding: '2rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Admin Dashboard</h1>
-        <button onClick={handleLogout} style={logoutStyle}>
+        <button onClick={signOut} style={logoutStyle}>
           Logout
         </button>
       </div>
-      <p>Welcome, Administrator! Manage users, verify workers, and monitor bookings here.</p>
+      <p>Welcome, {profile?.full_name || 'Administrator'}! Manage users, verify workers, and monitor bookings here.</p>
     </div>
   )
 }
