@@ -20,3 +20,6 @@ Thumbs.db
 # Claude Code configuration
 .claude/
 .mcp.json
+# Supabase local dev state (never commit)
+supabase/.branches
+supabase/.temp
