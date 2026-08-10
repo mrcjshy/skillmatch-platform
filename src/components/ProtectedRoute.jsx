@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../hooks/useAuth'
 
 // This component wraps pages that require authentication
 // allowedRoles = which roles can access this page (e.g., ['worker'] or ['administrator'])
@@ -20,7 +20,7 @@ function ProtectedRoute({ children, allowedRoles }) {
   // Logged in but profile not loaded yet - wait
   if (!profile) {
     return (
-      <div style={loadingStyle}>
+      <div className="flex min-h-screen items-center justify-center text-xl text-ink-muted">
         <p>Loading profile...</p>
       </div>
     )
@@ -43,15 +43,6 @@ function ProtectedRoute({ children, allowedRoles }) {
 
   // All checks passed - show the page
   return children
-}
-
-const loadingStyle = {
-  minHeight: '100vh',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: '1.25rem',
-  color: '#666'
 }
 
 export default ProtectedRoute

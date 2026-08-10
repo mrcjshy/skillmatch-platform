@@ -8,6 +8,14 @@ import { Link, useNavigate } from 'react-router-dom'
 // supabase: Our database client
 import { supabase } from '../lib/supabase'
 
+// Shared auth page shell + form field classes
+import AuthLayout, {
+  fieldClass,
+  inputClass,
+  labelClass,
+  submitButtonClass
+} from '../components/AuthLayout'
+
 function Login() {
   // ============================================
   // STATE VARIABLES
@@ -149,138 +157,54 @@ function Login() {
   // ============================================
 
   return (
-    <div style={styles.container}>
-      <div style={styles.formCard}>
-        <h1 style={styles.title}>Welcome Back</h1>
-        <p style={styles.subtitle}>Sign in to SkillMatch</p>
+    <AuthLayout title="Welcome Back" subtitle="Sign in to SkillMatch" error={error}>
+      {/* The login form */}
+      <form onSubmit={handleSubmit}>
 
-        {/* Error message box - only shows if error exists */}
-        {error && <div style={styles.errorBox}>{error}</div>}
+        {/* Email field */}
+        <div className={fieldClass}>
+          <label className={labelClass}>Email Address</label>
+          <input
+            type="email"
+            name="email"
+            value={formData.email}
+            onChange={handleChange}
+            placeholder="you@example.com"
+            className={inputClass}
+            required
+          />
+        </div>
 
-        {/* The login form */}
-        <form onSubmit={handleSubmit}>
-          
-          {/* Email field */}
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Email Address</label>
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="you@example.com"
-              style={styles.input}
-              required
-            />
-          </div>
+        {/* Password field */}
+        <div className={fieldClass}>
+          <label className={labelClass}>Password</label>
+          <input
+            type="password"
+            name="password"
+            value={formData.password}
+            onChange={handleChange}
+            placeholder="Enter your password"
+            className={inputClass}
+            required
+          />
+        </div>
 
-          {/* Password field */}
-          <div style={styles.inputGroup}>
-            <label style={styles.label}>Password</label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="Enter your password"
-              style={styles.input}
-              required
-            />
-          </div>
+        {/* Submit button */}
+        <button
+          type="submit"
+          className={submitButtonClass + ' mt-2'}
+          disabled={loading}
+        >
+          {loading ? 'Signing in...' : 'Sign In'}
+        </button>
+      </form>
 
-          {/* Submit button */}
-          <button 
-            type="submit" 
-            style={styles.submitButton}
-            disabled={loading}
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-
-        {/* Link to registration page */}
-        <p style={styles.registerLink}>
-          Don't have an account? <Link to="/register">Register here</Link>
-        </p>
-      </div>
-    </div>
+      {/* Link to registration page */}
+      <p className="mt-6 text-center text-ink-muted">
+        Don&apos;t have an account? <Link to="/register">Register here</Link>
+      </p>
+    </AuthLayout>
   )
 }
 
-// ============================================
-// STYLES
-// ============================================
-
-const styles = {
-  container: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '2rem',
-    backgroundColor: '#f5f5f5'
-  },
-  formCard: {
-    backgroundColor: '#fff',
-    padding: '2rem',
-    borderRadius: '8px',
-    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
-    width: '100%',
-    maxWidth: '400px'
-  },
-  title: {
-    margin: '0 0 0.5rem 0',
-    fontSize: '1.75rem',
-    color: '#333',
-    textAlign: 'center'
-  },
-  subtitle: {
-    margin: '0 0 1.5rem 0',
-    color: '#666',
-    textAlign: 'center'
-  },
-  errorBox: {
-    backgroundColor: '#fee',
-    color: '#c00',
-    padding: '0.75rem',
-    borderRadius: '4px',
-    marginBottom: '1rem',
-    fontSize: '0.9rem'
-  },
-  inputGroup: {
-    marginBottom: '1rem'
-  },
-  label: {
-    display: 'block',
-    marginBottom: '0.5rem',
-    fontWeight: '500',
-    color: '#333'
-  },
-  input: {
-    width: '100%',
-    padding: '0.75rem',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontSize: '1rem',
-    boxSizing: 'border-box'
-  },
-  submitButton: {
-    width: '100%',
-    padding: '0.875rem',
-    backgroundColor: '#3b82f6',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '1rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    marginTop: '0.5rem'
-  },
-  registerLink: {
-    textAlign: 'center',
-    marginTop: '1.5rem',
-    color: '#666'
-  }
-}
-
-export default Login  
+export default Login
