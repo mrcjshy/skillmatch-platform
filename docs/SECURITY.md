@@ -13,9 +13,15 @@ never bypasses a trigger; both must pass for a write to land.
   (granted to `authenticated`, `service_role`). DEFINER is required so the helpers can
   reliably read `public.users` regardless of the caller's RLS visibility; the empty
   search_path plus schema qualification defend against search_path hijacking.
-- `public.guard_users_protected_columns()` — `SECURITY INVOKER`. Under DEFINER,
-  `current_user` would report the function owner (`postgres`), silently satisfying
-  Tier 1 for every caller and disabling the guard.
+- `public.guard_users_protected_columns()` and
+  `public.guard_worker_profiles_protected_columns()` — `SECURITY INVOKER`. Under
+  DEFINER, `current_user` would report the function owner (`postgres`), silently
+  satisfying Tier 1 for every caller and disabling the guard.
+- Guard trigger functions need no client-callable EXECUTE surface: EXECUTE is checked
+  only when the trigger is created (by the owner), never when it fires. The Piece E
+  guard therefore carries no EXECUTE grant for `PUBLIC`, `anon`, `authenticated`, or
+  `service_role` (live `proacl = {postgres=X/postgres}`). The Piece D guard predates
+  this convention — see GAP-004.
 
 ## Guard trigger behavior
 
@@ -34,6 +40,32 @@ EACH ROW`. Protected columns: `users.role`, `users.is_active`.
   - UPDATE: any change to `role` or `is_active` (`IS DISTINCT FROM`) rejected.
   - All rejections raise `ERRCODE '42501'`.
 
+`trg_guard_worker_profiles_protected_columns` — `BEFORE INSERT OR UPDATE ON
+public.worker_profiles FOR EACH ROW` (Piece E). Protected columns (5):
+`is_verified`, `verified_by`, `rating_avg`, `strike_count`, `badge_level`. Same
+three-tier shape as the users guard (Tier 1 and Tier 2 identical, including the
+nested `auth.uid() IS NOT NULL` check).
+
+- Tier 3 — everyone else:
+  - INSERT: all five columns are forced to the trusted initial state
+    `is_verified = false`, `verified_by = NULL`, `rating_avg = 0`,
+    `strike_count = 0`, `badge_level = 'none'` (server-owned; client-supplied values
+    are overwritten, never rejected). `'none'` is trigger-enforced initial state
+    only: the column keeps NO default and remains nullable, and pre-existing
+    `NULL` rows are not backfilled (no schema/ERD change, D-001).
+  - UPDATE: any change (`IS DISTINCT FROM`, so NULL-safe) to any of the five columns is
+    rejected with `ERRCODE '42501'` and a column-specific message
+    ("Changing your own verification status / verifier / rating average / strike
+    count / badge level is not permitted."). Identical re-sends pass. Non-protected
+    columns (`bio`, `availability_status`, …) are unaffected, subject to existing RLS.
+- The guard is a column-value guard, not a row-authorization mechanism. Tier 2 is
+  bounded by the unchanged self-row RLS: an administrator's cross-user UPDATE yields
+  `UPDATE 0` before the trigger fires (GAP-003), and the role/status-agnostic INSERT
+  policy is not made worker-only or is_active-aware (GAP-002). Trigger authorization
+  must never be read as fixing either gap.
+- Verified locally 18/18 behavioral cases plus supplementary and catalog checks,
+  all inside rolled-back transactions; Piece D 13/13 re-run unchanged.
+
 ## Standing RPC caveat (locked)
 
 Any postgres-owned SECURITY DEFINER function that UPDATEs `public.users` executes the
@@ -42,6 +74,12 @@ column guard entirely. Consequently, no client-callable SECURITY DEFINER RPC may
 protected user columns without restricted EXECUTE, input validation, and security
 review. This applies to all future RPCs, including the future atomic booking RPC if it
 ever touches protected `public.users` columns.
+
+The same caveat applies verbatim to `public.worker_profiles` and its five protected
+columns (Piece E). Future system paths that compute `rating_avg`, `strike_count`, or
+`badge_level` (ratings, no-show handling, portfolio scale) must be trusted Tier 1
+paths or restricted, reviewed RPCs — a postgres-owned DEFINER function writing
+`worker_profiles` bypasses the guard via Tier 1.
 
 ## Findings log
 
@@ -54,6 +92,21 @@ provisioning is restricted to trusted backend/database paths such as service_rol
 database administration; no normal authenticated registration path may create
 administrators.
 
+**F-002** — Pre-Piece-E, the `public.worker_profiles` INSERT and UPDATE policies
+checked row ownership only (`user_id = auth.uid()`), so an authenticated worker could
+self-assign protected profile metadata: `is_verified = true`, `verified_by = <any
+administrator id>` (forged verification attribution), `rating_avg = 5`,
+`strike_count = 0` (resetting a 3-strike suspension) and `badge_level = 'large'`, on
+both INSERT and UPDATE. No administrator authority derives from these columns, but they
+feed the locked matching model (D-002 verification and rating weights), the 3-strike
+rule and the badge system. Verified locally in a rolled-back transaction. **CLOSED** by
+the Piece E guard trigger (`20260820190630_phase0_piece_e_worker_profiles_guard.sql`),
+verified 18/18 behavioral cases plus supplementary and catalog checks; Piece D 13/13
+regression unchanged. Piece E closes the unauthorized WRITE PATH going forward; it
+does not audit, normalize, or remediate protected values that may already exist in
+pre-Piece-E rows (existing rows remain untouched; no backfill, no schema change).
+Row-level gaps discovered alongside it remain open as GAP-002 and GAP-003.
+
 ## Known gaps registry
 
 **GAP-001** — `public.users` UPDATE RLS (`allow_update_own_profile`) is self-row only,
@@ -61,6 +114,38 @@ so authenticated administrators cannot UPDATE another user's row via PostgREST.
 Discovered-by: Piece D (migration header + Piece D report). Status: **OPEN / DEFERRED
 BY DECISION** (D-008) — must be resolved as a dedicated, security-reviewed
 admin-management task, never absorbed silently into another piece.
+
+**GAP-002** — `public.worker_profiles` INSERT RLS ("Workers can insert their own
+profile") is role/status agnostic: it checks only `user_id = auth.uid()` and does not
+enforce that the caller is an active worker. An authenticated non-worker role —
+confirmed for both client and administrator — can create its own `worker_profiles`
+row, and an inactive/suspended worker can also create one. Discovered-by: Piece E
+inspection (verified locally, rolled back; Piece E cases T7, S2, S3 — the guard forces
+the trusted initial state on such rows but does not prevent them). Status: **OPEN /
+DEFERRED** — row authorization / RLS; not fixed by Piece E. Resolution path:
+dedicated, security-reviewed worker-module RLS task (restrictive write policies using
+`private.is_active_worker()`).
+
+**GAP-003** — `public.worker_profiles` UPDATE RLS ("Workers can update their own
+profile") is self-row only, so an authenticated administrator cannot UPDATE another
+worker's `worker_profiles` row (verify, strike, badge) through normal PostgREST;
+only Tier 1 paths can. Analogue of GAP-001. Discovered-by: Piece E inspection
+(verified locally; Piece E case T6/S4 — `UPDATE 0`, RLS bound, not trigger
+rejection). Status: **OPEN / DEFERRED** — row authorization; the Piece E guard's
+Tier 2 is bounded by this policy. Resolution path: the dedicated, security-reviewed
+admin-management task (alongside GAP-001 / D-008), never absorbed into another piece.
+
+**GAP-004** — `public.guard_users_protected_columns()` (Piece D) retains an explicit
+`anon` EXECUTE grant (live `proacl` includes `anon=X/postgres`): the project's
+`ALTER DEFAULT PRIVILEGES … IN SCHEMA public GRANT ALL ON FUNCTIONS TO anon` granted
+`anon` explicitly at CREATE time, and the migration's `REVOKE … FROM PUBLIC` does not
+remove an explicit grantee. No exploit path (trigger functions are not
+permission-checked at fire time and a `RETURNS trigger` function cannot be called
+directly), but the privilege surface is not as stated in the Piece D migration
+comment. Discovered-by: Piece E inspection. Status: **OPEN / DEFERRED (hardening)** —
+deliberately not modified in Piece E (no edits to the applied Piece D migration).
+Resolution path: a dedicated hardening migration issuing `REVOKE EXECUTE … FROM
+anon, authenticated, service_role` to match the Piece E convention.
 
 Future gap template:
 
