@@ -81,6 +81,55 @@ columns (Piece E). Future system paths that compute `rating_avg`, `strike_count`
 paths or restricted, reviewed RPCs — a postgres-owned DEFINER function writing
 `worker_profiles` bypasses the guard via Tier 1.
 
+## Hosted Auth control — leaked-password protection (Piece F)
+
+Date: 2026-08-21 (historical evidence snapshot — plan, settings, and advisor state as
+observed on this date, not an evergreen claim).
+
+**Status: CLOSED — evaluated; unavailable on current plan. Feature NOT enabled. No
+hosted changes made.** Manual dashboard evaluation with a read-only Supabase MCP
+cross-check; no SQL, migration, billing change, or Auth setting change was performed.
+
+- Objective: evaluate whether Supabase Auth leaked-password protection (the
+  HaveIBeenPwned Pwned Passwords check used by Supabase Auth to reject known leaked
+  passwords) is available on the project's current plan, and enable it if supported.
+  The objective was evaluate-then-enable-if-supported, not simply "enable".
+- Threat model: leaked-password protection reduces credential-stuffing /
+  account-takeover risk from passwords that are already compromised (present in public
+  breach corpora). It is a hosted Auth-layer control. RLS and the Piece D / Piece E
+  column guards are separate authorization / data-integrity controls and are NOT
+  compensating controls for it — they constrain what an authenticated session may
+  write, not whether an attacker holding a user's compromised password can obtain that
+  session.
+- Plan evidence (captured during Piece F):
+  - organization plan observed as Free in the dashboard;
+  - dashboard setting present, OFF, labeled Pro+ only;
+  - read-only Supabase MCP independently returned organization plan `free`;
+  - project status `ACTIVE_HEALTHY`;
+  - Security Advisor returned `auth_leaked_password_protection` — "Leaked Password
+    Protection Disabled" — level WARN.
+- Advisor warning: while the project remains on Free and the feature remains
+  unavailable/disabled, this warning is expected to remain unresolved. Piece G should
+  classify it as known / plan-gated rather than treat it as a regression.
+- Advisor discrepancy (unexplained): the dashboard Security Advisor showed 2 warnings;
+  a later read-only MCP advisor call returned exactly 1 security lint (the one above).
+  The second dashboard warning is unidentified. No explanation is asserted here.
+  Carried into Piece G for fresh capture of both surfaces.
+- Related observations (recorded as future-hardening observations only — NOT registry
+  gaps; no GAP entry created): minimum password length = 6; character requirements
+  unset; secure password change OFF; require current password when updating OFF.
+  Current Supabase documentation recommends a minimum password length of at least 8.
+  Client-side validation currently enforces the same 6-character minimum; any future
+  hosted minimum-length change must move in lockstep with frontend validation.
+- Upgrade path: enabling the hosted control later (Pro+ plan) requires no DB schema or
+  migration change — it is a dashboard Auth setting — but Auth/client flows
+  (registration, sign-in, password reset/update) should be regression-tested for
+  compromised-password error handling before and after enabling, since a rejected
+  leaked password surfaces as a new Auth error path.
+- External reference (Pro+ restriction and password-strength guidance):
+  https://supabase.com/docs/guides/auth/password-security
+- No decision record (no D-010) and no gap entry (no GAP-005) were created for Piece F.
+
 ## Findings log
 
 **F-001** — Pre-Piece-D, the `public.users` INSERT policy (`allow_insert_own_profile`)
