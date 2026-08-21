@@ -63,12 +63,21 @@ agents propose, Josh decides.
 
 ## STATUS
 
-Snapshot date: 2026-08-20. Updated only at phase boundaries.
+Snapshot date: 2026-08-21. Updated only at phase boundaries.
 
-- Phase 0 pieces A–D complete (D closed a verified privilege-escalation path; see
-  docs/SECURITY.md, F-001).
-- Remaining Phase 0: E (worker_profiles guard), F (hosted leaked-password protection
-  setting — Josh manual), G (regression verification).
-- Hosted Supabase untouched.
-- Next parallel-safe track: Expo foundation in sibling repo `skillmatch-mobile`
-  (does not exist as of the 2026-08-20 snapshot).
+- Phase 0 pieces A–G complete.
+  - Piece D (`users` guard) verified 13/13; closed F-001.
+  - Piece E (`worker_profiles` guard) verified 18/18 plus supplementary checks; Piece D
+    regression remained 13/13; closed F-002.
+  - Piece F (hosted leaked-password protection) evaluated and closed as plan-gated /
+    unavailable on the current Free plan; feature NOT enabled.
+  - Piece G final regression verification passed (clean local reset, all four
+    migrations, D 13/13, E 18/18 + 6 supplementary, D re-run 13/13).
+- Phase 0 closure outcome: READY TO CLOSE WITH DEFERRED HARDENING.
+- GAP-001 through GAP-004 remain open/deferred as recorded in docs/SECURITY.md.
+- Hosted Supabase has NOT received the Phase 0 A–E migration deployment. Phase 0
+  repository implementation and verification are complete through Piece G; hosted
+  deployment remains a separate, explicitly authorized future action.
+- Next: Phase 0 implementation/verification is complete. Module 1 has not started;
+  next application-development work may proceed only after normal task scoping.
+  Hosted Phase 0 deployment remains separately gated.

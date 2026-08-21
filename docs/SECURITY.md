@@ -130,6 +130,63 @@ cross-check; no SQL, migration, billing change, or Auth setting change was perfo
   https://supabase.com/docs/guides/auth/password-security
 - No decision record (no D-010) and no gap entry (no GAP-005) were created for Piece F.
 
+## Phase 0 final verification — regression and closure (Piece G)
+
+Date: 2026-08-21 (evidence snapshot as observed on this date).
+
+**Outcome (reviewer-approved): READY TO CLOSE WITH DEFERRED HARDENING.** Piece G was
+verification and documentation only: no migration, SQL, RLS, function/trigger, ACL,
+frontend, hosted Supabase, or billing change was made.
+
+Local regression evidence (Piece G Pass 1):
+
+- Clean `npx supabase db reset --local` succeeded from scratch; all four migrations
+  applied with zero errors.
+- Expected security functions, triggers, and catalog properties matched this document
+  (function security split, guard triggers, EXECUTE surfaces as recorded, including
+  the GAP-004 `anon` grant on the Piece D guard).
+- Piece D regression: 13/13 PASS.
+- Piece E regression: 18/18 PASS plus 6 supplementary PASS.
+- Piece D re-run after Piece E: 13/13 PASS.
+- All checks ran inside rolled-back transactions; zero local test residue after
+  rollback.
+
+Hosted state (read-only observation; no hosted mutation performed):
+
+- Hosted project remained `ACTIVE_HEALTHY`; organization remained Free.
+- Fresh Security Advisor capture returned exactly one WARN:
+  `auth_leaked_password_protection`. This matches the earlier programmatic Piece F
+  capture and the fresh ChatGPT MCP capture. Classified as known / plan-gated per
+  Piece F, not a regression.
+- Leaked-password protection remained NOT enabled.
+- Hosted Auth-config read remained MCP-UNAVAILABLE for fresh verification. The Piece F
+  Auth values (minimum password length, character requirements, secure password
+  change, require-current-password) are therefore HISTORICAL evidence only — not
+  freshly verified in Piece G.
+- Frontend registration still enforces a minimum password length of 6 (see the Piece
+  F related observations above; not duplicated here).
+- Dashboard-vs-MCP advisor warning-count discrepancy (dashboard showed 2, MCP
+  returned 1 in Piece F): classified **UNRESOLVED historical evidence**. No evidence
+  exists for a current second advisor lint; no explanation for the earlier dashboard
+  count is asserted.
+
+GAP reverification (statuses preserved exactly; none closed, renumbered, or added):
+
+- GAP-001 — CONFIRMED; remains OPEN / DEFERRED BY DECISION (D-008).
+- GAP-002 — CONFIRMED; remains OPEN / DEFERRED.
+- GAP-003 — CONFIRMED; remains OPEN / DEFERRED.
+- GAP-004 — CONFIRMED; remains OPEN / DEFERRED (hardening).
+
+Future-hardening observation (NOT a registry gap; no GAP entry created):
+
+- Baseline Supabase/default privileges give `anon` and `authenticated` broad table
+  privileges on `public.users` and `public.worker_profiles`. Current application row
+  access remains RLS-governed, and no Phase 0 exploit or regression was demonstrated
+  from these grants. A future least-privilege review may evaluate the table grants.
+
+No decision record (no D-010), no finding (no F-003), and no gap entry (no GAP-005)
+were created for Piece G.
+
 ## Findings log
 
 **F-001** — Pre-Piece-D, the `public.users` INSERT policy (`allow_insert_own_profile`)
