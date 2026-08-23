@@ -63,7 +63,7 @@ agents propose, Josh decides.
 
 ## STATUS
 
-Snapshot date: 2026-08-21. Updated only at phase boundaries.
+Snapshot date: 2026-08-22. Updated only at phase boundaries.
 
 - Phase 0 pieces A–G complete.
   - Piece D (`users` guard) verified 13/13; closed F-001.
@@ -75,9 +75,13 @@ Snapshot date: 2026-08-21. Updated only at phase boundaries.
     migrations, D 13/13, E 18/18 + 6 supplementary, D re-run 13/13).
 - Phase 0 closure outcome: READY TO CLOSE WITH DEFERRED HARDENING.
 - GAP-001 through GAP-004 remain open/deferred as recorded in docs/SECURITY.md.
-- Hosted Supabase has NOT received the Phase 0 A–E migration deployment. Phase 0
-  repository implementation and verification are complete through Piece G; hosted
-  deployment remains a separate, explicitly authorized future action.
-- Next: Phase 0 implementation/verification is complete. Module 1 has not started;
-  next application-development work may proceed only after normal task scoping.
-  Hosted Phase 0 deployment remains separately gated.
+- Hosted Supabase received the Phase 0 migration deployment on 2026-08-22 via
+  `npx supabase db push` (applied set: 20260811025903, 20260820042554,
+  20260820190630; hosted migration history: 4 rows). The hosted project now contains
+  the Phase 0 security objects corresponding to the repository migrations, with their
+  catalog properties verified after deployment. Evidence record: docs/SECURITY.md,
+  "Hosted Phase 0 deployment record — 2026-08-22".
+- Next: Phase 0 implementation, verification, and hosted deployment are complete.
+  Module 1 has not started; next application-development work may proceed only after
+  normal task scoping. Any further hosted operation remains separately gated per the
+  Supabase targeting rule.

@@ -187,6 +187,102 @@ Future-hardening observation (NOT a registry gap; no GAP entry created):
 No decision record (no D-010), no finding (no F-003), and no gap entry (no GAP-005)
 were created for Piece G.
 
+## Hosted Phase 0 deployment record — 2026-08-22
+
+Date: 2026-08-22 (evidence snapshot as observed on this date).
+
+**Status: DEPLOYED.** The hosted project now runs the Phase 0 security model recorded
+above. Hosted operation: one `npx supabase db push` to project `uzbntxxwayqfkusyhodl`
+(livelihood-matching-platform, Free plan, ap-northeast-1, PG 17.6), preceded by a
+`npx supabase db push --dry-run` gate. No other hosted mutation was performed.
+
+Deployment evidence:
+
+- Dry-run listed exactly three pending migrations; the applied set was byte-identical
+  to the dry-run list:
+  - `20260811025903_phase0_backend_security_v3`
+  - `20260820042554_phase0_piece_d_users_guard`
+  - `20260820190630_phase0_piece_e_worker_profiles_guard`
+- Baseline `20260810153826_remote_schema` was NOT re-applied.
+- Hosted migration history: exactly 4 rows (`20260810153826`, `20260811025903`,
+  `20260820042554`, `20260820190630`).
+- Repository state at deployment: local `main` = `origin/main` =
+  `1448b751aaa71a2ef054a22686f80185ad5a4186`. Hosted state is expressed as the
+  recorded migration versions and the catalog-verified objects below, not as a commit.
+
+Post-deployment verification (2026-08-22, read-only):
+
+- All Phase 0 objects present on hosted (schema `private`, `private.is_admin()`,
+  `private.is_active_worker()`, both guard functions, both guard triggers).
+  SECURITY DEFINER / INVOKER properties and effective privileges MATCH the security
+  model recorded in this document; both guard triggers enabled.
+- RLS flags on `public.users` and `public.worker_profiles` and all 6 policies
+  byte-identical to the preflight capture.
+- Advisor unchanged: single plan-gated `auth_leaked_password_protection` WARN
+  (expected on Free plan).
+- Project status `ACTIVE_HEALTHY`.
+- Independent live re-verification confirmed the hosted migration history, project
+  health, function security/privilege state, and guard-trigger presence after
+  deployment. The deployment evidence was reviewed and accepted before this record
+  was finalized.
+
+C4 — exposed-schemas verification (`private` must not be API-exposed):
+
+- Pre-deploy (before `private` existed): Dashboard listed `graphql_public`, `public`;
+  no `pgrst.db_schemas` override on `authenticator`, making the Dashboard list
+  authoritative.
+- Post-deploy DB-side check (2026-08-22, read-only catalog query over
+  `pg_db_role_setting` via Supabase MCP): zero `pgrst.*` entries on any role or
+  database scope — `pgrst.db_schemas` absent, `pgrst.db_extra_search_path` absent;
+  `authenticator` carries only platform defaults
+  (`session_preload_libraries=safeupdate`, `statement_timeout=8s`,
+  `lock_timeout=8s`). Premise re-verified post-deploy.
+- The available MCP/tooling exposed no readable platform-level Data API configuration
+  surface, so the Dashboard was used as the closing direct observation surface.
+- Post-deploy Dashboard observation (2026-08-22, lead developer): Exposed schemas
+  selector shows 2 of 3 — `graphql_public` SELECTED, `public` SELECTED, `private`
+  PRESENT IN SELECTOR but NOT SELECTED. Extra search path: `public`, `extensions`
+  only; `private` absent.
+- Ruling: **C4 CLOSED** — `private` confirmed unexposed after hosted Phase 0
+  deployment.
+
+GAP-004 on hosted:
+
+- Reproduced on hosted exactly as preflight predicted (`anon` EXECUTE on the users
+  guard trigger function via public-schema `pg_default_acl`). Status unchanged:
+  **OPEN / DEFERRED**. No action taken.
+
+C2 — backup acceptance:
+
+- One-time acceptance on a three-fact basis: (i) 0 rows in all hosted tables;
+  (ii) non-destructive SQL (additive DDL; `DROP TRIGGER IF EXISTS` → `CREATE` is
+  idempotent re-creation, not data-destructive); (iii) a written rollback plan
+  existed. This acceptance applies only to this deployment and does not waive backup
+  review for future hosted changes. Future deployments must make an explicit
+  backup/restore decision from the then-current data, plan capabilities, and
+  deployment risk.
+
+C3 — hosted behavioral verification:
+
+- No hosted behavioral smoke tests were performed at deployment. The guard objects
+  that close F-001 and F-002 in repository/local verification are now present and
+  catalog-verified on hosted. Hosted behavioral verification was intentionally
+  deferred by ruling to Module 1's first real application flows.
+
+Non-TTY process deviation:
+
+- During `db push`, command wrapping made stdin non-TTY and the CLI skipped the
+  interactive `[Y/n]` confirmation entirely. Compensated by: the dry-run gate,
+  unchanged pre-push migration history, and exact post-verification. Classification:
+  PROCESS DEVIATION, not a security finding. Ruled ACCEPTED. (The derived operating
+  rule is queued for AGENTS.md under a separate tooling task; this record documents
+  the deviation only.)
+
+Carried adjacent observation (NOT a registry gap; no GAP / F number assigned):
+
+- Dashboard shows "Automatically expose new tables" = ON. Unchanged in this task;
+  queued for a separate future least-privilege hardening review.
+
 ## Findings log
 
 **F-001** — Pre-Piece-D, the `public.users` INSERT policy (`allow_insert_own_profile`)
