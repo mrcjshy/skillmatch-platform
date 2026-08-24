@@ -4,10 +4,10 @@
 
 SkillMatch is a livelihood matching and skills platform (BSIT capstone) connecting local
 workers with clients. Operational Worker, Client, and Administrator interfaces are
-delivered by one Expo + React Native application (sibling repository `skillmatch-mobile`;
-role-based routing; Android primary) on the shared Supabase backend (Postgres, RLS,
-Auth). The React/Vite web application in this repository is limited to the public
-landing/information site.
+delivered by one Expo + React Native application (planned sibling repository
+`skillmatch-mobile`, not yet created; role-based routing; Android primary) on the shared
+Supabase backend (Postgres, RLS, Auth). The React/Vite web application in this repository
+is limited to the public landing/information site.
 This file is the canonical instruction set for all coding agents
 working in this repository; read it at the start of every task.
 
