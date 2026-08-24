@@ -59,3 +59,19 @@ React Native, Android primary; one native application with role routing (not sep
 Worker and Client apps); shared Supabase backend with the web application; no
 duplicated business logic; WebView is not the final mobile solution. Web retains full
 Admin, public landing/information pages, and a responsive Worker/Client fallback.
+
+#### Resolution (2026-08-24) — LOCKED
+
+Panel-approved architecture: SkillMatch's operational Worker, Client, and
+Administrator interfaces are delivered through one Expo + React Native
+application with role-based routing, Android as the primary target, and a
+shared Supabase backend. The React/Vite web application is limited to the
+public landing/information site. It is not an operational role interface or
+responsive fallback. WebView is not the final mobile implementation.
+
+Effective status of D-009 from this resolution onward: LOCKED.
+
+Resolution recorded 2026-08-24: Josh confirmed panel approval. The original
+PENDING-PANEL text above is retained for append-only provenance but is
+superseded by this resolution, including its former web Admin and responsive
+Worker/Client fallback architecture.

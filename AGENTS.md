@@ -3,8 +3,11 @@
 ## Purpose
 
 SkillMatch is a livelihood matching and skills platform (BSIT capstone) connecting local
-workers with clients: a Supabase backend (Postgres, RLS, Auth), this React/Vite web
-frontend, and a planned Expo mobile app in a sibling repository (`skillmatch-mobile`).
+workers with clients. Operational Worker, Client, and Administrator interfaces are
+delivered by one Expo + React Native application (sibling repository `skillmatch-mobile`;
+role-based routing; Android primary) on the shared Supabase backend (Postgres, RLS,
+Auth). The React/Vite web application in this repository is limited to the public
+landing/information site.
 This file is the canonical instruction set for all coding agents
 working in this repository; read it at the start of every task.
 
@@ -155,8 +158,9 @@ Report the candidate command and the uncertainty instead.
 
 Agents may make low-level implementation decisions. Agents may NOT change: research
 objectives, approved scope, the 11-table ERD, the matching model, the worker-choice
-booking model, AI feature boundaries, the security model, or the native/web role
-architecture. If a locked decision appears impossible to implement, STOP and report.
+booking model, AI feature boundaries, the security model, or
+the native-primary application and landing-only web architecture. If a locked decision
+appears impossible to implement, STOP and report.
 
 ## Documentation update policy
 
