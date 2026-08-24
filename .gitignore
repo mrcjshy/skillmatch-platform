@@ -18,7 +18,9 @@ dist/
 Thumbs.db
 
 # Claude Code configuration
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 .mcp.json
 # Supabase local dev state (never commit)
 supabase/.branches
