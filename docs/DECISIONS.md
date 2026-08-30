@@ -20,6 +20,120 @@ from existing `users.barangay` and `users.city`; job location derives from exist
 `job_postings.address`, `barangay`, and `city`. No live GPS/tracking; no
 exact-distance claims unsupported by the stored data.
 
+#### Amendment — Verification Gate and Three-Factor Ranking (2026-08-31) — LOCKED
+Verification moves from Stage 2 weighted ranking into Stage 1 eligibility.
+
+A Worker is eligible for matching only when all of the following are true:
+
+- `users.role = 'worker'`
+- `users.is_active = true`
+  - this represents active / not suspended status
+  - suspension, including the three-strike suspension rule when implemented,
+    sets this false and removes the Worker from the candidate set
+- `worker_profiles.availability_status = 'available'`
+- `worker_profiles.is_verified = true`
+- the Worker shares at least one required skill with the job
+
+Verification is therefore a **safety precondition**, not a ranking preference.
+
+Only eligible Workers proceed to Stage 2.
+
+**Stage 2 weighted ranking**
+
+Skill      50
+Location   30
+Rating     20
+Total     100
+
+**Skill**
+
+matched required skills / total required skills × 50
+
+Worker proficiency may be displayed for explainability/profile context
+but does not affect the matching score.
+
+**Location**
+
+same barangay + same city = 30
+same city only            = 10
+otherwise                 = 0
+
+Location remains address-based using existing stored location fields.
+
+No GPS.
+No exact-distance claim.
+No zone scoring at this stage.
+
+**Rating**
+
+For a Worker with received ratings:
+
+rating_avg / 5 × 20
+
+For a Worker with no received ratings:
+
+- neutral `3.0` is used for computation only
+- rating component = `12/20`
+- expose `is_new_worker = true`
+- UI later displays `New — no ratings yet`
+- neutral 3.0 must not be represented as an actual Worker rating
+
+**Ranking order**
+
+1. weighted total descending
+2. fewer completed bookings
+3. earlier registration
+
+**Rationale**
+
+Moving verification into eligibility ensures that only administrator-vetted
+Workers can receive livelihood opportunities.
+
+Verification is a safety requirement rather than a ranking preference.
+
+Rebasing the ranking to:
+
+50 Skill / 30 Location / 20 Rating
+
+preserves:
+
+Skill > Location > Rating
+
+while retaining Location /30 for possible future refinement.
+
+Effective status of D-002 from this amendment onward: LOCKED as amended.
+The original Stage 2 line (40 skill / 30 location / 20 verification / 10 rating)
+is retained above for append-only provenance but is superseded by this amendment.
+
+#### Clarification — N8 Secure Computation Boundary (2026-08-31) — LOCKED
+N8 matching will use:
+
+private.compute_job_matches(job_id)
+public.match_workers_for_job(p_job_id)
+
+Security requirements:
+
+- private computation function is not directly callable by client roles
+- revoke EXECUTE from `PUBLIC`
+- revoke EXECUTE from `authenticated`
+- grant no client-facing EXECUTE permission to the private function
+- authenticated public wrapper performs caller/job authorization before invoking private computation
+- public wrapper uses a restricted `SECURITY DEFINER` boundary
+- wrapper uses `search_path = ''`
+- only the minimum projection required for matching/explainability is returned
+- Worker phone, email, residential address, and unnecessary private data are not exposed
+
+Downstream consequences:
+
+- demo Worker must be administrator-verified before hosted N8 matching tests
+- N9 acceptance must re-check `is_active = true` and `is_verified = true`
+  at acceptance time
+- Admin Worker verification becomes operationally required for real participant matching
+- manuscript consistency work later describes verification as an eligibility
+  precondition and ranking as the three-factor Skill / Location / Rating mechanism
+- parked zone refinement remains out of scope and requires a future explicit
+  D-001 + D-002 amendment before schema changes
+
 ### D-003 — Worker-choice booking (2026-08-20) — LOCKED
 System determines and ranks eligible workers and notifies them; workers choose whether
 to accept; the first valid acceptance wins via an atomic PostgreSQL claim; the client
