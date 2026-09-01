@@ -134,6 +134,72 @@ Downstream consequences:
 - parked zone refinement remains out of scope and requires a future explicit
   D-001 + D-002 amendment before schema changes
 
+#### Clarification — N8 Worker Opportunity Read Boundary (2026-09-01) — LOCKED
+N8 adds a Worker-facing read boundary through:
+
+`public.list_my_job_opportunities()`
+
+The function accepts no Worker identifier parameter. The current Worker is derived
+only from `auth.uid()`.
+
+Caller authorization and matching eligibility are intentionally separated.
+
+An unauthenticated caller, Client, Administrator, inactive Worker, or other caller
+that fails the active-Worker authorization gate receives an authorization failure
+(`42501`).
+
+An authenticated active Worker who is currently unverified, busy, offline, has no
+required-skill overlap, or otherwise does not satisfy the authoritative Stage 1
+matching eligibility rules receives a successful response with zero opportunity rows
+rather than an authorization error.
+
+The Worker-facing wrapper does not reproduce Stage 1 eligibility or the
+Skill 50 / Location 30 / Rating 20 scoring mechanism. Both remain authoritative
+inside `private.compute_job_matches(job_id)`. For each open job, the Worker wrapper
+reuses that scorer and retains only the row whose `worker_id` equals the
+authenticated caller.
+
+The Worker-facing projection is limited to:
+
+- `job_id`
+- `title`
+- `description`
+- `barangay`
+- `city`
+- `budget`
+- `scheduled_at`
+- `skill_points`
+- `location_points`
+- `rating_points`
+- `total_points`
+
+The Worker opportunity surface does not expose Client identity or contact
+information, other Worker identities, competitor scores, candidate counts, or the
+Worker's rank against other candidates.
+
+Returned opportunities use the following deterministic presentation order:
+
+1. `total_points DESC`
+2. `scheduled_at ASC NULLS LAST`
+3. `job_id ASC`
+
+This ordering is presentation-only. It is not an additional D-002 scoring factor,
+does not alter the within-job Worker ranking rules, and is not persisted.
+
+The existing `public.match_workers_for_job(job_id)` function remains the
+owning-Client diagnostic and explainability surface for the current implementation.
+It is not a Client Worker-selection mechanism and does not change D-003: the Client
+does not manually choose a Worker. The longer-term product disposition of this
+diagnostic Client surface may be revisited after the defense without changing the
+current worker-choice booking model.
+
+Implementation observation: `public.list_my_job_opportunities()` evaluates open jobs
+through the authoritative scorer using a LATERAL/equivalent scorer call per open job.
+Its computational cost therefore scales with the number of open jobs. This is
+accepted for the current capstone-scale workload. A future optimization must not
+duplicate, bypass, or create a second authoritative copy of the matching rules
+without an approved implementation decision.
+
 ### D-003 — Worker-choice booking (2026-08-20) — LOCKED
 System determines and ranks eligible workers and notifies them; workers choose whether
 to accept; the first valid acceptance wins via an atomic PostgreSQL claim; the client

@@ -349,6 +349,18 @@ deliberately not modified in Piece E (no edits to the applied Piece D migration)
 Resolution path: a dedicated hardening migration issuing `REVOKE EXECUTE … FROM
 anon, authenticated, service_role` to match the Piece E convention.
 
+Clarification (2026-09-01, N8 / N8-W) — N8 and N8-W reconfirmed the GAP-004 behavior
+rather than discovering a new issue. In this project, schema `public` carries default
+function EXECUTE grants to the named roles `anon`, `authenticated`, and
+`service_role`, so `REVOKE … FROM PUBLIC` alone does not remove EXECUTE already
+granted directly to those roles. A new public RPC migration must therefore explicitly
+revoke each unintended named role and then grant only the intended caller role.
+`public.match_workers_for_job(uuid)` (N8) and `public.list_my_job_opportunities()`
+(N8-W) both follow this explicit role-by-role revoke pattern, and their live `proacl`
+values were verified to contain only the intended grantees. This clarification records
+the required pattern for future public RPCs; it does not create a new GAP and does not
+change the status of GAP-004.
+
 Future gap template:
 
 ```
