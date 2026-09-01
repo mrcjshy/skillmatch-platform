@@ -206,6 +206,107 @@ to accept; the first valid acceptance wins via an atomic PostgreSQL claim; the c
 never manually selects from a ranked list. Worker details/contact information become
 available to the client only after confirmation; messaging is booking-scoped.
 
+#### Clarification — N9 Atomic Worker Acceptance Boundary (2026-09-01) — LOCKED
+N9 implements Worker acceptance through:
+
+`public.accept_job_opportunity(p_job_id uuid)`
+
+The function accepts exactly one Job identifier and no Worker identifier. The
+accepting Worker is derived exclusively from `auth.uid()`.
+
+The acceptance flow preserves the Worker-choice booking model:
+
+Client posts a Job → the system determines eligible/ranked Workers → an eligible
+Worker sees the opportunity → the Worker accepts → the first valid Worker
+acceptance wins → the Booking is created.
+
+The Client does not manually select, assign, or substitute a Worker.
+
+Acceptance is atomic. The target `job_postings` row is locked with
+`SELECT ... FOR UPDATE` before the acceptance decision proceeds. If two eligible
+Workers attempt to accept the same open Job concurrently, only the transaction
+holding the Job row lock can proceed first. After the winning transaction creates
+the Booking and changes the Job to `matched`, the losing transaction re-reads the
+committed non-open state and receives the unavailable result.
+
+Acceptance-time match eligibility is revalidated through the authoritative
+`private.compute_job_matches(p_job_id)` scorer for the authenticated Worker. N9
+does not reproduce the matching rules locally. The re-check therefore covers the
+current Worker role/account state, active status, verification status,
+availability, and required-skill overlap using the same authoritative matching
+boundary established by D-002/N8.
+
+A successful acceptance creates exactly one Booking for the winning transaction
+with:
+
+- `job_id` from the locked Job
+- `worker_id` from `auth.uid()`
+- `client_id` from the locked Job owner
+- `status = 'confirmed'`
+
+The same transaction changes the Job from `open` to `matched`.
+
+The Booking begins as `confirmed` because the Worker acceptance itself is the
+confirmation event under the Worker-choice model. The legacy `pending` Booking
+default is not used as the acceptance state. Payment processing is not performed
+by N9; the existing payment fields remain at their existing unset/default values
+until the separate payment lifecycle is implemented.
+
+The successful RPC result is limited to:
+
+- `booking_id`
+- `job_id`
+- `booking_status`
+- `job_status`
+
+It does not expose Client identity/contact information, competitor information,
+candidate rank, or matching details that are not required for the acceptance
+result.
+
+The implemented acceptance error boundary is:
+
+- authorization failure → SQLSTATE `42501`
+- authenticated Worker is no longer match-eligible → SQLSTATE `SM403`
+- Job is nonexistent or no longer available/open → SQLSTATE `SM409`
+
+Nonexistent and non-open Jobs intentionally use the same unavailable response so
+the Worker-facing surface does not disclose whether an arbitrary Job identifier
+exists.
+
+Direct application Booking creation and modification are not part of the N9 flow.
+The legacy direct authenticated Booking INSERT and UPDATE policies were removed.
+Booking cancellation, completion, no-show handling, and payment-state changes
+therefore require future controlled lifecycle RPCs rather than ordinary
+participant table writes.
+
+Client direct Job UPDATE and DELETE are restricted to Jobs that are currently
+`open`. A direct Client UPDATE must also leave the Job `open`. As a result, an
+ordinary Client cannot directly transition a Job to `matched`, reopen a matched
+Job, or directly delete a matched Job after a Worker has won.
+
+The `bookings.job_id → job_postings.id` foreign key remains `ON DELETE CASCADE`;
+N9 does not change that foreign key. The winning confirmed Booking is protected
+from ordinary Client-triggered cascade deletion by the open-only Job DELETE
+authorization boundary.
+
+A database uniqueness rule on `bookings.job_id` remains deferred.
+Cancellation/rematching semantics must be decided before introducing a uniqueness
+constraint or partial unique index. N9 first-wins correctness currently comes from
+the Job row lock, atomic Job state transition, removal of direct Booking writes,
+and open-only Client Job lifecycle access.
+
+Notifications are not created by N9 and remain a separate module.
+
+Verification boundary as of this entry:
+
+- N9 local implementation and concurrency: VERIFIED
+- N9 hosted migration: DEPLOYED
+- N9 hosted catalog/security boundary: VERIFIED
+- N9 hosted authenticated acceptance: NOT YET TESTED
+- N9 hosted concurrency: NOT YET TESTED
+- N9 native UI: NOT YET TESTED
+- Full booking E2E: NOT YET TESTED
+
 ### D-004 — AI feature boundaries (2026-08-20) — LOCKED
 Skill gap: canonical result is a rule-based set difference — AI does not determine the
 gap; AI may convert the computed result into simple Taglish guidance, on-demand; no

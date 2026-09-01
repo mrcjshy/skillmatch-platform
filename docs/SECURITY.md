@@ -361,6 +361,56 @@ values were verified to contain only the intended grantees. This clarification r
 the required pattern for future public RPCs; it does not create a new GAP and does not
 change the status of GAP-004.
 
+**N9 implementation note — atomic Worker acceptance (2026-09-01)**
+
+*Legacy Booking INSERT path closed.* Before N9, the policy `"System can insert
+bookings"` carried only `WITH CHECK (client_id = auth.uid())`, so an authenticated
+Client could directly create a Booking while supplying any Worker identifier — a
+direct contradiction of the Worker-choice model. N9 removes that policy with no direct
+INSERT replacement. **Client direct Worker assignment through bookings INSERT: CLOSED.**
+The normal application creation path is now the controlled
+`public.accept_job_opportunity(p_job_id uuid)` RPC.
+
+*Legacy Booking UPDATE path closed.* The policy `"Workers and clients can update their
+own bookings"` allowed participants broad direct Booking mutation (it carried no
+`WITH CHECK`, so the resulting row was unconstrained). N9 removes that direct UPDATE
+policy with no replacement. Ordinary participants can no longer directly rewrite
+`job_id`, `worker_id`, `client_id`, `status`, the payment fields, or completion state.
+Future lifecycle and payment writes require dedicated controlled RPCs. The participant
+SELECT policy is preserved unchanged.
+
+*Job matched→open side door closed.* The Client Job UPDATE policy is now open-only in
+both `USING` and `WITH CHECK`, so ordinary Client direct updates are restricted to
+their own currently-open Jobs and must leave them open. This prevents ordinary Client
+`open → matched`, `open → cancelled`, `open → completed`, and `matched → open`
+transitions through direct DML.
+
+*Matched-Job DELETE / cascade side door closed.* The Client Job DELETE policy is now
+open-only. The foreign key is unchanged and remains
+`bookings.job_id → job_postings.id ON DELETE CASCADE`. **N9 did NOT change the FK.**
+Protection is authorization-based: ordinary Client DML cannot directly delete a matched
+Job, so the cascade cannot be reached through that path after a successful acceptance.
+
+*N9 RPC ACL.* `public.accept_job_opportunity(p_job_id uuid)` is `SECURITY DEFINER`,
+`VOLATILE`, `SET search_path = ''`, with EXECUTE granted to `authenticated` and no
+EXECUTE for `PUBLIC`, `anon`, or `service_role`. The migration follows the
+already-documented GAP-004 role-by-role revoke pattern above. This is not a new GAP.
+
+*Hosted catalog result.* Post-N9 hosted state verified as 11 public base tables, 74
+public columns, 27 public RLS policies, 0 zone columns. Catalog and security deployment
+are verified; **hosted authenticated acceptance and hosted concurrency remain separate
+pending tests** and are not claimed here.
+
+*Carry-forwards (recorded, not acted on).* The existing notifications INSERT policy
+permits authenticated insertion broadly (`WITH CHECK (true)`) and remains a security
+carry-forward for the Notifications module; no new GAP number is assigned here.
+`bookings.worker_id → users.id` and `bookings.client_id → users.id` are both
+`ON DELETE CASCADE`; ordinary user account DELETE is not currently reachable through
+the application and no delete-account feature exists, but account-deletion/lifecycle
+design must explicitly decide how historical Bookings are preserved or removed. No
+unique constraint or index on `bookings.job_id` was added; that remains intentionally
+deferred until cancellation/rematching semantics are locked.
+
 Future gap template:
 
 ```
