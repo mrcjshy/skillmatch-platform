@@ -200,6 +200,46 @@ accepted for the current capstone-scale workload. A future optimization must not
 duplicate, bypass, or create a second authoritative copy of the matching rules
 without an approved implementation decision.
 
+#### Clarification — N10 Administrator Verification Operationalized (2026-09-05) — LOCKED
+The D-002 amendment made `worker_profiles.is_verified = true` a Stage 1 eligibility
+precondition. It did not provide a controlled path for an Administrator to set that
+column, so verification was a locked requirement with no operational mechanism. N10
+supplies the mechanism. This clarification records the implemented reality; it does not
+change the amendment.
+
+Verification remains a Stage 1 eligibility precondition and is **not** a Stage 2 ranking
+factor. The ranking remains Skill 50 / Location 30 / Rating 20.
+
+Administrator verification is operational through two reviewed RPCs:
+
+`public.list_unverified_workers()`
+`public.verify_worker(p_worker_user_id uuid)`
+
+`public.verify_worker(uuid)` is the authoritative controlled write path for this
+operation. It writes only the two fields the operation requires:
+
+- `worker_profiles.is_verified`
+- `worker_profiles.verified_by`
+
+It preserves the role/authorization checks and the unavailable boundary: a caller who is
+not an active administrator receives `42501`; an already-verified Worker, a non-worker
+target, and a nonexistent target all receive the same `SM409`, so the function is not an
+account-existence oracle and a second verification cannot overwrite the original
+`verified_by` attribution. The target profile row is locked `FOR UPDATE` before the
+decision proceeds.
+
+N12 later added trusted `worker_verified` notification emission inside the same
+authoritative verification transaction. That addition changes neither the D-002 matching
+weights nor the verification-gate semantics.
+
+**GAP-003 precision.** N10 solves the Worker-verification use-case operationally. It does
+**not** close the broader `worker_profiles` administrative-policy gap. Administrators do
+**not** now hold general cross-user UPDATE access: `worker_profiles` UPDATE RLS remains
+self-row only, and `verify_worker` reaches the row as a postgres-owned SECURITY DEFINER
+function, not through a widened policy. Controlled administration of `strike_count`,
+`badge_level`, and protected profile fields generally remains outside N10 and unresolved.
+GAP-003 remains OPEN / DEFERRED. See docs/SECURITY.md.
+
 ### D-003 — Worker-choice booking (2026-08-20) — LOCKED
 System determines and ranks eligible workers and notifies them; workers choose whether
 to accept; the first valid acceptance wins via an atomic PostgreSQL claim; the client
@@ -307,6 +347,81 @@ Verification boundary as of this entry:
 - N9 native UI: NOT YET TESTED
 - Full booking E2E: NOT YET TESTED
 
+#### Clarification — N9 Status Closure and N12 Emission (2026-09-05) — LOCKED
+The two statements above — "Notifications are not created by N9 and remain a separate
+module" and the "Verification boundary as of this entry" list — describe the N9 boundary
+**at the date they were written (2026-09-01)** and are retained as dated provenance. Both
+were true then. Later verified work has superseded them operationally, as recorded here.
+Neither is rewritten.
+
+Current verification status:
+
+- N9 hosted authenticated acceptance: **VERIFIED**
+- N9 hosted concurrency / first-valid-acceptance behavior: **VERIFIED**
+- N9 native UI: **VERIFIED**
+- Full continuous booking E2E in one uninterrupted rehearsal: **NOT YET VERIFIED —
+  rehearsal still needed.** The original "Full booking E2E: NOT YET TESTED" line above
+  therefore remains current, not merely historical.
+
+These statuses are previously closed evidence synchronized here on 2026-09-05. No test
+was performed by this documentation task.
+
+Notification emission. N12 replaced `public.accept_job_opportunity(p_job_id uuid)` via
+`CREATE OR REPLACE`, preserving the N9 acceptance, authorization and concurrency contract
+— every argument, return column, error code and message, the `FOR UPDATE` Job lock, the
+authoritative eligibility re-check, the security properties, `search_path` and ACL — and
+adding atomic trusted notification emission after the authoritative writes.
+
+On a successful acceptance N12 emits exactly:
+
+- one `booking_confirmed` notification to the Worker
+- one `booking_confirmed` notification to the Client
+
+Emission is inside the acceptance transaction, so a failed acceptance emits nothing. This
+does not change the Worker-choice booking model: the Client still does not select,
+assign, or substitute a Worker, and the first valid Worker acceptance still wins.
+
+#### Clarification — N11 Participant Booking Visibility (2026-09-05) — LOCKED
+D-003 states that Worker details and contact information become available to the Client
+only after confirmation. N11 implements that contact-release principle as a read boundary
+through two RPCs:
+
+`public.list_my_worker_bookings()`
+`public.list_my_client_bookings()`
+
+Contract:
+
+- caller identity derives exclusively from `auth.uid()`
+- neither function takes a participant-id or Booking-id parameter, so one participant
+  cannot enumerate another's list
+- an owned Booking is listed **regardless of Booking status**, so history never
+  disappears
+- Booking status controls only whether counterparty information is released
+
+Ownership and status are therefore separate axes. Release states are `confirmed` and
+`completed`; `pending`, `cancelled` and `no_show` suppress.
+
+Privacy boundaries:
+
+- Worker-facing list: Client `full_name` and `phone` released in released states only.
+  Client email is never projected.
+- Client-facing list: the approved Worker profile block released in released states only,
+  gated as one unit so no field can leak while a sibling is suppressed. Worker email is
+  never projected, and neither is `verified_by`.
+- Worker skill projection: NULL when suppressed; an empty array when released for a
+  Worker with no skills; otherwise a deterministic de-duplicated alphabetical projection.
+  The empty-array case is distinguishable from suppression.
+- Ratings shown by N11 are aggregated from `public.ratings`, **not** from
+  `worker_profiles.rating_avg`, which nothing maintains. A Worker with no received
+  ratings yields count `0` and average `NULL` — never an actual `0` and never the
+  computation-only neutral `3.0` of D-002. Individual scores, comments and `rated_by`
+  are never projected.
+
+This implements the post-confirmation contact-release principle **without widening the
+`public.users` self-row-only SELECT policy**. Widening that policy would have exposed
+every account's contact details to every authenticated user, far beyond Bookings; these
+two functions are the only new cross-participant identity surface.
+
 ### D-004 — AI feature boundaries (2026-08-20) — LOCKED
 Skill gap: canonical result is a rule-based set difference — AI does not determine the
 gap; AI may convert the computed result into simple Taglish guidance, on-demand; no
@@ -319,6 +434,41 @@ account, booking, payment, or private user-data lookup. No new tables for AI fea
 ### D-005 — Security function split + INVOKER guard (2026-08-20) — LOCKED
 Helper functions are SECURITY DEFINER; the users column guard is SECURITY INVOKER.
 See docs/SECURITY.md ("Function security split", "Standing RPC caveat").
+
+#### Clarification — N12 Trusted Notification Write Boundary (2026-09-05) — LOCKED
+N12 applies the D-005 function security split to `public.notifications`. The implemented
+trusted-write model:
+
+- the direct authenticated INSERT policy was **removed** and not replaced
+- the broad recipient UPDATE policy was **removed** and not replaced
+- recipient SELECT remains own-row only (`user_id = auth.uid()`) and is unchanged
+- `public.mark_my_notification_read(uuid)` is the narrow recipient mutation — it can
+  change exactly one flag on exactly one own row
+- `private.emit_notification(uuid, text, text)` is internal-only and not client-callable;
+  no client role holds EXECUTE on it
+- the authoritative trusted writers are the reviewed server-side mutation paths: N9
+  acceptance and N10 verification emit notifications atomically with their authoritative
+  writes, inside the same transaction
+
+Consistent with D-005, the internal writer is `SECURITY INVOKER` while the recipient RPC
+is `SECURITY DEFINER`. The writer does not need definer rights — called from a
+postgres-owned DEFINER function it already reaches the table as owner — and leaving it
+invoker keeps a mistaken future GRANT fail-safe rather than making it an escalation.
+
+Deliberately not done: no notification trigger; no Worker-opportunity fan-out (matching
+is computed-on-read, so materialising a row per eligible Worker would mean recomputing
+eligibility at write time and leaving stale rows after every first-wins acceptance); no
+Realtime; no new notification table, column, or index. D-001 remains untouched.
+
+`is_read` remains nullable and NULL is treated as unread — readers must use
+`IS DISTINCT FROM true`, never `= false`.
+
+Privacy: notification messages carry the Job title and fixed operational text only. No
+contact information, participant name, email, phone, `verified_by`, or other
+status-gated N11 data is written into notification text. This matters beyond tidiness: a
+notification is immutable frozen text, while N11 releases counterparty contact under a
+**live** status rule, so embedded contact would keep displaying after a Booking later
+became cancelled, silently defeating that contract.
 
 ### D-006 — Administrator provisioning (2026-08-20) — LOCKED
 Administrator provisioning is restricted to trusted backend/database paths such as
@@ -356,3 +506,22 @@ Resolution recorded 2026-08-24: Josh confirmed panel approval. The original
 PENDING-PANEL text above is retained for append-only provenance but is
 superseded by this resolution, including its former web Admin and responsive
 Worker/Client fallback architecture.
+
+#### Implementation alignment (2026-09-05) — evidence, not a new decision
+D-009 as resolved above is unchanged. This note records only that the repository caught
+up to it.
+
+Until 2026-09-05 the React/Vite application still contradicted the locked architecture at
+runtime: `src/App.jsx` routed `/` to a Login page, `/register` to a Register page, and
+`/worker` `/client` `/admin` to role dashboards, and `src/main.jsx` wrapped the tree in an
+`AuthProvider`. None of it was dead code.
+
+Commit `d7e5ef11b9a91ac5cd51bb983339d284baae95aa` — `refactor: make web landing-only` —
+removed that legacy surface. A Landing page was created; the routing surface became `/`
+plus a catch-all redirect to `/`; the `AuthProvider` wrapper was removed; and twelve
+files were deleted, including the web Supabase client, so the site establishes no auth
+session and makes no Supabase call. The repository now implements the locked
+landing/information-only runtime.
+
+This is implementation evidence for the existing locked decision. It creates no new
+architecture decision and no new decision id.

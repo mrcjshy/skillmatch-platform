@@ -411,6 +411,216 @@ design must explicitly decide how historical Bookings are preserved or removed. 
 unique constraint or index on `bookings.job_id` was added; that remains intentionally
 deferred until cancellation/rematching semantics are locked.
 
+## Post-N12 security end state — 2026-09-05
+
+Date: 2026-09-05. This section is a **dated evidence snapshot**, not an evergreen
+invariant, and it is a documentation synchronization of previously closed evidence. No
+test, migration, hosted operation, or RPC invocation was performed to produce it. Every
+earlier dated record in this document is retained unchanged; where an earlier record has
+been superseded, the supersession is stated here rather than by editing the original.
+
+### Current hosted catalog snapshot
+
+Hosted project `uzbntxxwayqfkusyhodl`, as observed 2026-09-05:
+
+- migrations: **11**
+- public base tables: **11**
+- public columns: **74**
+- public RLS policies: **25**
+
+Application-data counts at the closed verification point:
+
+- `users` 13 · `auth.users` 13
+- `worker_profiles` 3 · `worker_skills` 10 · `skills` 4
+- `job_postings` 3 · `job_skills` 4
+- `portfolio_items` 0
+- `bookings` 0 · `notifications` 0 · `ratings` 0 · `messages` 0
+
+Zero fixture residue. Migration tail: `n10_db_01_admin_worker_verification` →
+`n11_db_01_participant_booking_lists` → `n12_db_01_trusted_notifications`.
+
+The policy count moved 27 → 25. The delta is exactly the two intentional N12 drops
+recorded below. The **27-policy figure in the post-N9 hosted catalog record above remains
+correct as a historical snapshot for its own date** and is deliberately not edited.
+
+### N10 — Administrator verification security boundary
+
+`public.list_unverified_workers()` — `SECURITY DEFINER`, `STABLE`, `SET search_path = ''`.
+Client EXECUTE surface is `authenticated` only, following the role-by-role revoke pattern
+recorded under GAP-004; the Administrator check is performed server-side inside the
+function. DEFINER is required because `public.users` SELECT is self-row only.
+
+`public.verify_worker(p_worker_user_id uuid)` — `SECURITY DEFINER`, `VOLATILE`,
+`SET search_path = ''`, EXECUTE granted to `authenticated` only, with Administrator
+authorization (`private.is_admin()`) enforced inside the function; every other caller
+receives `42501`. The target profile row is locked `FOR UPDATE` before the decision
+proceeds, so concurrent verification cannot record two `verified_by` attributions. The
+write is confined to the verification-operation fields **`is_verified` and `verified_by`
+only**. An already-verified Worker, a non-worker target, and a nonexistent target all
+return the same `SM409`, so the function is not an account-existence oracle. The N12
+version additionally emits a `worker_verified` notification atomically within the same
+transaction.
+
+This is the Standing RPC caveat applied deliberately: a postgres-owned DEFINER function
+reaches `worker_profiles` as Tier 1, which is why the EXECUTE surface is restricted, the
+input validated, and the write column-confined. **`worker_profiles` UPDATE RLS was not
+widened.**
+
+### GAP-003 — precise current status
+
+**GAP-003 remains OPEN / DEFERRED. It is NOT closed.**
+
+Clarification (2026-09-05): N10 operationally solves the specific Worker-verification
+use-case through `public.verify_worker(uuid)`, a reviewed, column-confined,
+authorization-checked RPC. It does not resolve the underlying gap:
+
+- cross-user `public.worker_profiles` UPDATE RLS remains **self-row only**; an
+  authenticated administrator still cannot UPDATE another Worker's profile row through
+  ordinary PostgREST
+- broader controlled administration of `strike_count`, `badge_level`, and protected
+  profile fields generally remains **unresolved / deferred**
+- the resolution path is unchanged: the dedicated, security-reviewed admin-management
+  task alongside GAP-001 / D-008, never absorbed into another piece
+
+Solving a use-case through a reviewed RPC is not the same as closing a row-authorization
+gap. No new GAP number is assigned.
+
+### N11 — participant Booking read / privacy boundary
+
+`public.list_my_worker_bookings()` and `public.list_my_client_bookings()` — both
+`SECURITY DEFINER`, `STABLE`, `SET search_path = ''`, EXECUTE granted to `authenticated`
+only.
+
+Their narrow security purpose: a Booking list must name the counterparty, but
+`public.users` SELECT is self-row only. These RPCs are the minimum surface that satisfies
+that need. Explicitly:
+
+- **N11 avoids widening `users` SELECT RLS.** The alternative would have exposed every
+  account's contact details to every authenticated user, far beyond Bookings. The users
+  policy and every other policy are unchanged.
+- the caller is derived from `auth.uid()`; neither function takes a participant-id or
+  Booking-id parameter
+- only owned Bookings are returned, in every status
+- counterparty contact/profile release is **live status-gated**: released while
+  `confirmed` or `completed`, suppressed for `pending`, `cancelled` and `no_show`
+- suppressed states expose no counterparty contact or profile data; the Client-facing
+  Worker profile block is gated as one unit
+- **email and `verified_by` are excluded** from both projections
+- rating aggregates are computed from `public.ratings`, not from the unmaintained
+  `worker_profiles.rating_avg`; an unrated Worker yields count `0` and average `NULL`,
+  never an actual `0` and never the neutral `3.0` matching constant
+
+### N12 — notification spoofing carry-forward: CLOSED
+
+The carry-forward recorded in the N9 implementation note above — that the notifications
+INSERT policy permits authenticated insertion broadly (`WITH CHECK (true)`) and remains a
+security carry-forward for the Notifications module — is retained as historical
+observation and was accurate when written. **It is CLOSED BY N12.**
+
+The pre-N12 policy was, despite its name, not system-only: `WITH CHECK (true)` let any
+authenticated account insert a notification for any `user_id` with arbitrary message
+text. It was reachable in practice rather than only in theory, because the N11 Booking
+list RPCs project the counterparty's user id, so a participant already held the id needed
+to write a forged `booking_confirmed` or `account_suspended` into that person's inbox,
+indistinguishable from a genuine system message. The UPDATE policy, named "mark as read",
+was column-unrestricted, so a recipient could rewrite the `type` and `message` of their
+own rows.
+
+Closure state after N12:
+
+- the authenticated INSERT policy is **dropped**, with no replacement direct INSERT
+  policy
+- the broad recipient UPDATE policy is **dropped**, with no replacement direct UPDATE
+  policy
+- `authenticated` direct table privilege is narrowed to **SELECT only**
+- `anon` direct notification access is **removed** (it previously held GRANT ALL and was
+  blocked only by having no policy)
+- `service_role` behavior was not broadened by N12
+- the only remaining notification RLS policy is the recipient SELECT
+  (`user_id = auth.uid()`), left byte-for-byte unchanged and not widened
+- `private.emit_notification(uuid, text, text)` is internal and not client-callable; no
+  client role holds EXECUTE
+- `public.mark_my_notification_read(uuid)` is the narrow recipient mutation
+- forged cross-user or system-looking notification creation is no longer available to an
+  ordinary authenticated client through the previous direct table path
+- a recipient can no longer rewrite immutable `message` or `type` through the former
+  broad UPDATE path
+
+Because privileges were narrowed at the GRANT layer, direct attempts fail with `42501`
+before RLS is consulted. No GAP number is assigned to this closure.
+
+### N9 — current test status
+
+Previously closed evidence, synchronized here on 2026-09-05:
+
+- N9 hosted authenticated acceptance: **VERIFIED**
+- N9 hosted concurrency: **VERIFIED**
+- N9 native acceptance UI: **VERIFIED**
+
+The lines in the post-N9 hosted catalog record above stating that hosted authenticated
+acceptance and hosted concurrency "remain separate pending tests" are retained as
+historical evidence for their own date and are superseded by the three statuses here.
+
+**Full continuous booking E2E remains rehearsal-needed** — it has never been run unbroken
+in a single session, and no such claim is made. iPhone locale/date verification has not
+been performed; emulator evidence is not iPhone evidence. No test was newly performed by
+this documentation-synchronization task.
+
+### Ratings carry-forward — still OPEN / HELD
+
+Evidence only. No design resolution is made here.
+
+- **INSERT** — the authenticated policy checks `rated_by = auth.uid()` and does **not**
+  verify Booking participation or eligibility. Any authenticated user can insert a rating
+  for any rated user against any `booking_id`.
+- **SELECT** — authenticated-wide `USING (true)`. Scores, comments and `rated_by` are
+  readable by any signed-in account.
+- **UPDATE / DELETE** — no participant policy exists.
+- `worker_profiles.rating_avg` — no implemented maintenance path (N8-OBS-05). Nothing
+  computes or updates it.
+- N8 matching currently consumes `worker_profiles.rating_avg`, applying the existing
+  cold-start computation semantics of D-002. This is inert at zero ratings but is a real
+  coupling once Ratings ships.
+
+**Ratings remains NOT STARTED / HELD**, pending its dedicated read-only preflight and
+explicit design authorization. Whether `rating_avg` will be maintained, or whether
+matching will aggregate `public.ratings` directly, is **not decided here** — that
+decision belongs to the Ratings task. N11 already reads aggregates from `public.ratings`
+rather than `rating_avg`, which is an implementation fact, not a resolution of this
+question.
+
+### Vercel / public-web deployment observation
+
+Dated operational observation, 2026-09-05. Not a security gap and not a decision.
+
+- Connected Vercel inspection found **no project linked** to the SkillMatch/capstone Git
+  repository.
+- The landing-only Git push (`d7e5ef1`) was therefore not expected to auto-deploy through
+  that observed account, and no deployment side effect was observed.
+- An earlier connector call returned an empty team list. That result conflicted with the
+  later direct project observation and is **not treated as authoritative evidence**. The
+  discrepancy is recorded, not investigated.
+- No Vercel project was created or linked by the landing-only task.
+- Creating or linking the future public landing / APK-distribution project is a separate,
+  separately authorized future operation.
+- Once such a Git-linked Vercel project exists, pushes to its production branch may
+  intentionally acquire deployment side effects and must be governed accordingly — a push
+  would stop being a purely local-consequence operation.
+
+**No hosted SkillMatch landing URL is claimed to exist as of this date.**
+
+### GAP registry status at this snapshot
+
+Statuses preserved exactly; none closed, renumbered, or added:
+
+- **GAP-001** — OPEN / DEFERRED BY DECISION (D-008)
+- **GAP-002** — OPEN / DEFERRED
+- **GAP-003** — OPEN / DEFERRED, with the N10 operational-verification clarification above
+- **GAP-004** — OPEN / DEFERRED (hardening)
+
+No GAP-005 is created by N10, N11, N12, the web landing-only correction, or this
+synchronization. No decision record (no D-010) is created either.
+
 Future gap template:
 
 ```
