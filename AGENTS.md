@@ -4,10 +4,11 @@
 
 SkillMatch is a livelihood matching and skills platform (BSIT capstone) connecting local
 workers with clients. Operational Worker, Client, and Administrator interfaces are
-delivered by one Expo + React Native application (planned sibling repository
-`skillmatch-mobile`, not yet created; role-based routing; Android primary) on the shared
-Supabase backend (Postgres, RLS, Auth). The React/Vite web application in this repository
-is limited to the public landing/information site.
+delivered by one Expo + React Native application (sibling repository `skillmatch-mobile`,
+which exists and is under active implementation; role-based routing; Android primary) on
+the shared Supabase backend (Postgres, RLS, Auth). The React/Vite web application in this
+repository is limited to the public landing/information site: it carries no operational
+role interface, no sign-in, no registration, and no Supabase runtime client.
 This file is the canonical instruction set for all coding agents
 working in this repository; read it at the start of every task.
 
@@ -171,7 +172,9 @@ agents propose, Josh decides.
 
 ## STATUS
 
-Snapshot date: 2026-08-22. Updated only at phase boundaries.
+Snapshot date: 2026-09-05. Updated only at phase boundaries.
+
+### Phase 0 — historical record (snapshot 2026-08-22)
 
 - Phase 0 pieces A–G complete.
   - Piece D (`users` guard) verified 13/13; closed F-001.
@@ -189,7 +192,27 @@ Snapshot date: 2026-08-22. Updated only at phase boundaries.
   the Phase 0 security objects corresponding to the repository migrations, with their
   catalog properties verified after deployment. Evidence record: docs/SECURITY.md,
   "Hosted Phase 0 deployment record — 2026-08-22".
-- Next: Phase 0 implementation, verification, and hosted deployment are complete.
-  Module 1 has not started; next application-development work may proceed only after
-  normal task scoping. Any further hosted operation remains separately gated per the
-  Supabase targeting rule.
+- Phase 0 implementation, verification, and hosted deployment are complete.
+
+### Current state (snapshot 2026-09-05)
+
+- The native application exists. `skillmatch-mobile` carries the implemented Worker,
+  Client, and Administrator interfaces; it is a sibling repository with no Git remote.
+- Closed pieces beyond Phase 0:
+  - N9 — atomic Worker job acceptance (DB + UI). Hosted runtime and concurrency verified.
+  - N10 — Administrator Worker verification (DB + UI). Hosted runtime verified.
+  - N11 — participant Booking lists (DB + UI). Hosted privacy and runtime verified.
+  - N12 — trusted Notifications (DB + UI). Hosted runtime and security verified.
+- The React/Vite operational legacy is retired. This repository's former web login,
+  registration, role-protected routing, Auth session bootstrap, Supabase runtime client,
+  and Worker/Client/Administrator dashboards were removed to enforce D-009; the web
+  routing surface is now the landing page plus a catch-all redirect to it.
+- Ratings: NOT STARTED / HELD. Its known RLS carry-forwards are recorded in
+  docs/SECURITY.md and are not addressed by any closed piece.
+- The full continuous booking end-to-end rehearsal has NOT been run unbroken, and
+  iPhone locale/date verification has NOT been performed. Emulator evidence is not
+  iPhone evidence.
+- Manuscript consistency with the post-N12 architecture is separately governed and is
+  not carried by this file.
+- Any further hosted operation remains separately gated per the Supabase targeting rule,
+  as do commit, integration, and Git push per the workflow loop.

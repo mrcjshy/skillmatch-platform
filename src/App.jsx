@@ -1,44 +1,20 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import ProtectedRoute from './components/ProtectedRoute'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import WorkerDashboard from './pages/WorkerDashboard'
-import ClientDashboard from './pages/ClientDashboard'
-import AdminDashboard from './pages/AdminDashboard'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import Landing from './pages/Landing'
 
+// D-009 (LOCKED): this web application is the public landing/information site
+// only. The Worker, Client, and Administrator interfaces belong to the native
+// SkillMatch application, so no operational route exists here — the former
+// /register, /worker, /client and /admin routes were retired.
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public routes - anyone can access */}
-        <Route path="/" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        {/* The only page this site serves */}
+        <Route path="/" element={<Landing />} />
 
-        {/* Protected routes - require login + correct role */}
-        <Route
-          path="/worker"
-          element={
-            <ProtectedRoute allowedRoles={['worker']}>
-              <WorkerDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/client"
-          element={
-            <ProtectedRoute allowedRoles={['client']}>
-              <ClientDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute allowedRoles={['administrator']}>
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
+        {/* Anything else — including stale bookmarks to the retired routes —
+            returns to the landing page rather than rendering nothing. */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )
