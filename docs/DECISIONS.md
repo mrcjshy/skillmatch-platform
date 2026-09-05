@@ -240,7 +240,7 @@ function, not through a widened policy. Controlled administration of `strike_cou
 `badge_level`, and protected profile fields generally remains outside N10 and unresolved.
 GAP-003 remains OPEN / DEFERRED. See docs/SECURITY.md.
 
-#### Clarification — Ratings Pre-Defense Contract (2026-09-05) — LOCKED, NOT YET IMPLEMENTED
+#### Clarification — Ratings Pre-Defense Contract (2026-09-05) — LOCKED, IMPLEMENTED (BL-01B)
 D-002 scores a Rating component out of 20 but nothing has ever written the column it
 reads. This entry locks the rules a later Ratings piece must implement. **It changes no
 part of the Stage 2 model: Skill 50 / Location 30 / Rating 20 is untouched.**
@@ -260,12 +260,47 @@ Immutability is load-bearing for that last point: transactional maintenance of
 `rating_avg` is only sound while ratings cannot be edited or removed outside the trusted
 recomputation path.
 
-**None of this is implemented.** Today the `ratings` INSERT policy checks only
-`rated_by = auth.uid()` — it does not enforce Booking participation, completed status,
-direction, or that `rated_user` is the counterparty. Those remain open security gaps
-recorded in docs/SECURITY.md. The alternative strategy of computing a live average from
-`public.ratings` and changing what the scorer reads is **not** current behaviour and is
-not adopted here.
+**This is now implemented as BL-01B.** The pre-BL-01B `ratings` INSERT policy checked only
+`rated_by = auth.uid()`; it enforced no Booking participation, no completed status, no
+direction, and no link between `rated_user` and the Booking. That policy is **removed and
+not replaced**, and the direct INSERT grant is revoked with it.
+
+Implemented reality:
+
+- **`public.rate_my_completed_worker(p_booking_id, p_score, p_comment)` is the sole
+  writer.** postgres-owned, SECURITY DEFINER, `search_path = ''`, EXECUTE granted to
+  `authenticated` only.
+- **Identities are server-derived, not parameters.** `rated_by` is `auth.uid()` and
+  `rated_user` is the Booking's `worker_id`, so identity substitution is unrepresentable
+  rather than merely rejected.
+- **Eligibility:** active Client account (`42501` otherwise), then a Booking that exists,
+  belongs to the caller, is `completed`, and has an assigned Worker — all four collapsed
+  into one `SM409`, as is a duplicate, so the RPC is not a Booking-existence oracle.
+- **Score `1..5`**, validated in the RPC for a clear message with the existing schema CHECK
+  kept as defence in depth. **Comment optional**, trimmed, empty/whitespace-only stored as
+  NULL, **maximum 1000 characters**; both input faults raise `22023`, which reveals nothing
+  about any Booking. Over-length is rejected, never truncated.
+- **One immutable rating per (Booking, rater)** via the existing
+  `UNIQUE (booking_id, rated_by)`. No update path, no delete path, no rating RPC for either.
+- **`worker_profiles.rating_avg` is maintained transactionally.** The target profile row is
+  locked `FOR UPDATE` **before** the rating is inserted, then the average is **recomputed in
+  full** from all rating rows — never incrementally — and written in the same transaction.
+  The lock is load-bearing: without it two Clients rating the same Worker concurrently can
+  lose an update.
+- **Direct participant writes denied.** `authenticated` holds only SELECT on
+  `public.ratings`; `anon` holds nothing.
+- **Rating reads narrowed** from `USING (true)` to `rated_by = auth.uid() OR rated_user =
+  auth.uid()`, so free-text comments and rater/rated pairs are no longer readable by every
+  signed-in account.
+- **No rating notification.** Deferred.
+
+**N8 is unchanged** and still reads `worker_profiles.rating_avg`; cold start remains
+`12/20` decided by the existence of rating rows. **N11 is unchanged** and still computes its
+aggregates live from `public.ratings`; the two now agree because the column is maintained.
+The alternative strategy of changing what the scorer reads is **not** adopted.
+
+As of this entry BL-01B is implemented and **locally verified only**; the hosted project has
+not received it, and hosted deployment is separately gated.
 
 ### D-003 — Worker-choice booking (2026-08-20) — LOCKED
 System determines and ranks eligible workers and notifies them; workers choose whether

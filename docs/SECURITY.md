@@ -743,16 +743,74 @@ ratings_booking_id_rated_by_key  UNIQUE (booking_id, rated_by)
 so **duplicate rating by the same rater for the same Booking is already
 schema-prevented**. No new constraint is needed for that case.
 
-The remaining gaps are unchanged and still open. The current direct INSERT policy checks
-only `rated_by = auth.uid()` and does not enforce:
+The remaining gaps recorded here were closed by BL-01B; see the section below.
 
-- Booking participation
-- `completed` Booking status
-- rating direction
-- that `rated_user` is the Booking counterparty
+### BL-01B Ratings trusted write boundary — 2026-09-05
 
-SELECT remains authenticated-wide, and there is no UPDATE or DELETE policy. **Ratings is
-neither secure nor implemented.**
+Supersedes the Ratings carry-forward and the duplicate-prevention correction above, both of
+which described the pre-BL-01B state: an INSERT policy whose only test was
+`rated_by = auth.uid()`, over a table still holding the unnarrowed Supabase default ACL,
+with `SELECT USING (true)` for every authenticated caller.
+
+**What was exploitable before.** The old policy prevented exactly one thing — forging the
+*rater*. It did not check Booking participation, `completed` status, direction, or that
+`rated_user` was the Booking's Worker. Any authenticated account could therefore rate any
+Booking in any status, naming any user as the rated party, including themselves.
+
+Implemented reality after BL-01B
+(`20260905220000_bl01b_db_01_ratings_trusted_path.sql`):
+
+- **Direct authenticated INSERT is DENIED.** The policy is dropped and not replaced, and
+  INSERT is revoked at the GRANT layer, so a direct write fails before RLS is consulted.
+- **Direct authenticated UPDATE and DELETE are DENIED** — no policy and no grant. Ratings
+  are append-only and immutable, which is what makes transactional aggregate maintenance
+  sound.
+- **SELECT is narrowed** from `USING (true)` to `rated_by = auth.uid() OR rated_user =
+  auth.uid()`, `TO authenticated`. Free-text comments and rater/rated pairs are no longer
+  readable by every signed-in account. N11's Booking-list RPCs are SECURITY DEFINER and
+  bypass RLS, so the released aggregates are unaffected.
+- **`anon` holds no privilege at all** on `public.ratings`; its ACL entry is gone.
+  `authenticated` holds **SELECT only**. `service_role` and the `postgres` owner entry are
+  unchanged. `REVOKE ALL` was used rather than an enumerated list so PostgreSQL 17's
+  MAINTAIN could not be left behind.
+- **`public.rate_my_completed_worker(uuid, integer, text)` is the sole writer** —
+  postgres-owned, `SECURITY DEFINER`, `SET search_path = ''`, every object schema-qualified,
+  EXECUTE revoked from PUBLIC/`anon`/`service_role` and granted to `authenticated` only.
+- **Server-derived identities.** `rated_by` is `auth.uid()`; `rated_user` is the Booking's
+  `worker_id`. Neither is a parameter, so substitution is unrepresentable.
+- **Ownership boundary.** Active Client account required (`42501`); then Booking exists,
+  is the caller's, is `completed`, and has a Worker — all four, plus a duplicate, collapsed
+  into one `SM409` so the RPC is not a Booking-existence oracle. Invalid score or an
+  over-length comment raise `22023`, a caller-input class that discloses nothing about any
+  Booking.
+- **Transactional aggregate maintenance.** The target `worker_profiles` row is locked
+  `FOR UPDATE` **before** the insert; the average is then recomputed in full from all
+  rating rows and written in the same transaction. Recomputation is used rather than
+  incremental arithmetic so the value is exact and self-healing. A forced aggregate-side
+  failure was shown locally to roll the rating back entirely.
+- **The protected-column guard is unchanged.** `rating_avg` is written through the guard's
+  existing Tier 1 (`current_user IN ('postgres','service_role')`), the same mechanism N10's
+  `verify_worker()` uses. An ordinary role changing `rating_avg` directly still hits Tier 3
+  and is refused — verified after BL-01B.
+
+The public policy count moves **25 → 24**: the Rating INSERT policy is removed and not
+replaced, while the Rating SELECT policy is replaced one-for-one. No table, column, index,
+constraint, trigger or publication is created, so D-001 is untouched.
+
+Local verification (14 migrations, clean reset): allowed ratings at scores 1–5; denied for a
+Worker caller (42501), a different Client, `confirmed`, `cancelled`, `no_show`, a
+nonexistent Booking, and a duplicate (all the same SM409); `22023` for NULL/0/6 scores and a
+1001-character comment; comment normalisation (NULL, empty, whitespace-only → NULL; padded →
+trimmed; 1000 accepted); `anon` refused EXECUTE; direct INSERT/UPDATE/DELETE refused at the
+GRANT layer; read visibility 1/1/2/0 for rater A, rater B, the rated Worker and an unrelated
+account. Aggregate: first rating exact, second exact mean, N11 live average agreeing within
+1e-6, and a forced two-Client lock-contention race producing no lost update. N8 regression:
+a rated Worker scored `13.33/20` from the maintained `rating_avg` while an unrated Worker
+scored the cold-start `12/20`. **Implemented and locally verified; NOT yet deployed to
+hosted, which remains at 13 migrations.**
+
+**Still deferred:** rating-received notification, Worker→Client rating, rating edit/delete,
+and any rating management surface.
 
 ### BL-01C Messaging security boundary — 2026-09-05
 
