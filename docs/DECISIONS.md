@@ -240,6 +240,33 @@ function, not through a widened policy. Controlled administration of `strike_cou
 `badge_level`, and protected profile fields generally remains outside N10 and unresolved.
 GAP-003 remains OPEN / DEFERRED. See docs/SECURITY.md.
 
+#### Clarification — Ratings Pre-Defense Contract (2026-09-05) — LOCKED, NOT YET IMPLEMENTED
+D-002 scores a Rating component out of 20 but nothing has ever written the column it
+reads. This entry locks the rules a later Ratings piece must implement. **It changes no
+part of the Stage 2 model: Skill 50 / Location 30 / Rating 20 is untouched.**
+
+- **Direction:** Client → Worker only.
+- **Eligibility:** the Booking must be `completed`.
+- **Rater:** that Booking's Client. **`rated_user`:** that Booking's Worker.
+- **Duplicate prevention:** the existing `UNIQUE (booking_id, rated_by)` constraint
+  already prevents the same rater rating the same Booking twice. No new constraint is
+  required for that case.
+- **Immutability:** ratings carry no UPDATE and no DELETE path.
+- **Aggregate strategy pre-defense:** the later trusted rating RPC maintains
+  `worker_profiles.rating_avg` transactionally, so the N8 scorer continues to read the
+  column exactly as it does today and is not modified.
+
+Immutability is load-bearing for that last point: transactional maintenance of
+`rating_avg` is only sound while ratings cannot be edited or removed outside the trusted
+recomputation path.
+
+**None of this is implemented.** Today the `ratings` INSERT policy checks only
+`rated_by = auth.uid()` — it does not enforce Booking participation, completed status,
+direction, or that `rated_user` is the counterparty. Those remain open security gaps
+recorded in docs/SECURITY.md. The alternative strategy of computing a live average from
+`public.ratings` and changing what the scorer reads is **not** current behaviour and is
+not adopted here.
+
 ### D-003 — Worker-choice booking (2026-08-20) — LOCKED
 System determines and ranks eligible workers and notifies them; workers choose whether
 to accept; the first valid acceptance wins via an atomic PostgreSQL claim; the client
@@ -421,6 +448,93 @@ This implements the post-confirmation contact-release principle **without wideni
 `public.users` self-row-only SELECT policy**. Widening that policy would have exposed
 every account's contact details to every authenticated user, far beyond Bookings; these
 two functions are the only new cross-participant identity surface.
+
+#### Clarification — BL-01A Booking Lifecycle Contract (2026-09-05) — LOCKED
+N9 removed the direct authenticated Booking INSERT and UPDATE policies without
+replacing them, which closed the Client-assigns-Worker side door but also left every
+confirmed Booking permanent and its Job permanently `matched`. BL-01A adds the two
+lifecycle exits, and only those two. Everything below marked IMPLEMENTED is live in
+`bl01a_db_01_booking_completion_cancellation`; everything marked LOCKED — NOT YET
+IMPLEMENTED or DEFERRED is not.
+
+**Completion — IMPLEMENTED.** Actor: **the owning Client only**.
+
+- Booking `confirmed` → `completed`
+- Job `matched` → `completed`
+- `bookings.completed_at` is set from trusted database time, never from the caller
+
+The Worker does not complete the Booking: completion is the Client's attestation that
+the work was delivered, and under the payment sequencing below it is the event a later
+payment piece depends on. There is **no intermediate worker-finished state**, and the
+legacy Booking `pending` value is **not** repurposed to create one.
+
+**Cancellation — IMPLEMENTED.** Actors: **the assigned Worker or the owning Client**.
+
+- Booking `confirmed` → `cancelled`
+- Job `matched` → `cancelled`
+
+Cancellation is **terminal**: no automatic reopen, no automatic rematching, and no
+replacement Booking is generated. If the Client still requires the service they create a
+new Job. This is a deliberate pre-defense product and security decision, not a schema
+limitation — it keeps N9's first-valid-acceptance concurrency model exactly as it is. The
+cancelled Booking is retained as history and is never deleted.
+
+**Payment sequencing — LOCKED.** Service completion occurs **before** payment.
+Completion itself does not mark anything paid, and BL-01A writes no payment column:
+`payment_method`, `payment_status` and `paymongo_ref` are preserved unchanged by both
+functions. Ordinary pre-defense cancellation happens before payment settlement, so it
+triggers no refund flow. Neither PayMongo nor COD is implemented.
+
+**No-show and strikes — DEFERRED PRE-DEFENSE.** The three-strike concept in the D-002
+amendment is unchanged and is not withdrawn. What is deferred is the *operational* path:
+no-show reporting, `strike_count` mutation, and automatic third-strike enforcement are
+not part of BL-01A and remain deferred until their abuse and adjudication rules can be
+defined safely. `status = 'no_show'` remains a schema value that no code path produces.
+
+**RPC shape — LOCKED.** Lifecycle writes use **narrow action-specific RPCs**, not a
+generic action-string transition function. The two actions have different actors —
+completion is Client-only, cancellation is either participant — and a single entry point
+would multiplex two authorization models behind one EXECUTE grant. This also matches the
+convention every existing public RPC in this project already follows.
+
+**Lock ordering — IMPLEMENTED.** Lifecycle mutators that touch both records lock in the
+fixed order **Booking row → Job row**, never inverted. A consistent lock order across
+lifecycle mutators avoids lock-order inversions and keeps concurrent terminal
+transitions deterministic. Every authorization and state decision is made from the
+locked row values, never from a pre-lock read.
+
+**Repeat-safe terminal handling — IMPLEMENTED.** A repeated completion or cancellation
+request against a Booking that is no longer valid for the requested transition returns
+the conflict class, performs no second state mutation, and emits no duplicate
+notification. This is deliberately described as repeat-safe terminal handling rather
+than idempotency: the repeated call does not succeed quietly, it conflicts.
+
+**Notification matrix — IMPLEMENTED.** Emitted inside the same transaction as the
+authoritative write:
+
+- Client completion → the **Worker** receives `booking_completed`
+- Client cancellation → the **Worker** receives `booking_cancelled`
+- Worker cancellation → the **Client** receives `booking_cancelled`
+
+In short: completed notifies the Worker; cancelled notifies the counterparty. The actor
+is never notified of their own action. A rating-received notification remains deferred.
+
+#### Clarification — Messaging Send Boundary (2026-09-05) — LOCKED, NOT YET IMPLEMENTED
+D-003 already locks that messaging is Booking-scoped. This fixes the remaining question
+of *when* a participant may send:
+
+- messages may be **sent only while the Booking status is `confirmed`**
+- message **history remains readable** after a terminal status (`completed`, `cancelled`,
+  `no_show`)
+
+This supersedes the earlier working suggestion that sends should also be allowed while
+`completed`; that suggestion is retained nowhere as authoritative and is superseded by
+this entry.
+
+**This rule is not yet enforced.** The current `messages` policies scope INSERT and
+SELECT to Booking participants and prevent `sender_id` spoofing, but carry no
+Booking-status predicate at all, so sends are presently possible in every status.
+Closing that gap is BL-01C.
 
 ### D-004 — AI feature boundaries (2026-08-20) — LOCKED
 Skill gap: canonical result is a rule-based set difference — AI does not determine the

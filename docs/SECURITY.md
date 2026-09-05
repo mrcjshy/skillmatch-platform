@@ -621,6 +621,163 @@ Statuses preserved exactly; none closed, renumbered, or added:
 No GAP-005 is created by N10, N11, N12, the web landing-only correction, or this
 synchronization. No decision record (no D-010) is created either.
 
+## BL-01A Booking lifecycle security boundary — 2026-09-05
+
+Date: 2026-09-05. Records the security boundary of the two lifecycle RPCs added by
+`bl01a_db_01_booking_completion_cancellation`, plus two factual corrections to earlier
+carry-forwards. Local verification only; no hosted deployment is claimed.
+
+### Booking write surface
+
+Current authoritative reality:
+
+- authenticated direct Booking **INSERT: denied**
+- authenticated direct Booking **UPDATE: denied**
+
+`public.bookings` carries **only** its participant SELECT policy. Neither BL-01A function
+creates, drops or alters any policy, and **participants hold no broad table UPDATE
+permission**. The writes succeed because a postgres-owned SECURITY DEFINER function is the
+table owner and `relforcerowsecurity` is false — the same mechanism recorded for N10 on
+`worker_profiles` and N12 on `notifications`.
+
+The trusted Booking writers are now exactly three:
+
+```
+public.accept_job_opportunity        (N9, creates the Booking)
+public.complete_my_client_booking    (BL-01A)
+public.cancel_my_booking             (BL-01A)
+```
+
+Verified from the catalog rather than from source: a scan of every function body in
+`public` and `private` returns exactly these three as writers of `public.bookings`, and
+the same three as writers of `public.job_postings`.
+
+### Completion boundary — `public.complete_my_client_booking(uuid)`
+
+`SECURITY DEFINER`, `VOLATILE`, `SET search_path = ''`, postgres-owned, EXECUTE revoked
+from `PUBLIC`, `anon`, `authenticated` and `service_role` and then granted to
+`authenticated` only (live `proacl` = `postgres=X/postgres,authenticated=X/postgres`).
+
+- Client identity derived from `auth.uid()`; no actor identifier is accepted from the
+  caller
+- active-Client authorization via `private.is_active_client()`; every other caller,
+  including the assigned Worker, receives `42501` before any Booking is read
+- the Client must own the Booking
+- the Booking must be `confirmed` and its Job `matched`
+- Booking row then Job row locked `FOR UPDATE`, in that fixed order
+- all validation performed after the locks, from the locked values, including that
+  `booking.client_id = job.client_id`
+- atomic Booking + Job transition to `completed` with a database-time `completed_at`
+- atomic trusted notification emission in the same transaction
+- payment fields untouched
+
+### Cancellation boundary — `public.cancel_my_booking(uuid)`
+
+Same security properties, ACL and lock order.
+
+- caller identity derived from `auth.uid()`
+- active Worker **or** active Client required, else `42501`
+- the caller must be the exact Booking participant — that Booking's `worker_id` or
+  `client_id`
+- the Booking must be `confirmed` and its Job `matched`
+- post-lock validation of the Booking/Job pair
+- terminal cancellation: the Job is set `cancelled` and is **never reopened**; no
+  rematching and no replacement Booking
+- atomic counterparty notification in the same transaction
+- payment fields untouched
+
+Implemented forward guard: **cancellation of an already-paid Booking fails closed**
+(`SM403`, raised only after participation is proven). No path can currently set
+`payment_status = 'paid'`, so this is defensive. **No refund system exists.**
+
+### Error and anti-oracle behaviour
+
+The established convention is extended, not replaced:
+
+```
+42501  caller role/account authorization failure
+SM403  legitimate caller blocked by an action-eligibility rule, where used
+SM409  unavailable / current-state conflict
+```
+
+Unavailable Booking cases are intentionally **collapsed** where practical — nonexistent
+Booking, Booking belonging to another participant, Booking already terminal, Booking not
+`confirmed`, and inconsistent Booking/Job linkage all produce the same conflict result —
+so an authenticated caller cannot use these functions to probe which Booking ids exist or
+what state another participant's Booking is in. `SM403` is used only after participation
+has been proven, where the error reveals nothing the caller does not already know.
+
+### Notification atomicity
+
+Lifecycle notifications are emitted through the existing N12 helper **inside the same
+database transaction** as the authoritative write. A failed notification insert must roll
+back the lifecycle write. Verified locally: under a temporary failure seam on
+`public.notifications`, both completion and cancellation aborted with the Booking still
+`confirmed`, the Job still `matched`, `completed_at` NULL and zero notifications; with the
+seam removed the same call succeeded and emitted exactly one notification.
+
+Notification text carries the Job title and fixed operational wording only. No contact
+information is written into notifications, which remain immutable while contact release
+is governed by live Booking status.
+
+### N11 privacy regression
+
+Re-verified after both transitions:
+
+- **completed** Booking — remains listed, and the existing N11 contact-release behaviour
+  is unchanged
+- **cancelled** Booking — remains listed as history, and the counterparty
+  contact/profile projection becomes **suppressed**
+
+The live status rule therefore survives the new transitions in both directions.
+
+### Correction — Ratings duplicate prevention
+
+The Ratings carry-forward recorded above is corrected on one point of fact: the baseline
+schema already carries
+
+```
+ratings_booking_id_rated_by_key  UNIQUE (booking_id, rated_by)
+```
+
+so **duplicate rating by the same rater for the same Booking is already
+schema-prevented**. No new constraint is needed for that case.
+
+The remaining gaps are unchanged and still open. The current direct INSERT policy checks
+only `rated_by = auth.uid()` and does not enforce:
+
+- Booking participation
+- `completed` Booking status
+- rating direction
+- that `rated_user` is the Booking counterparty
+
+SELECT remains authenticated-wide, and there is no UPDATE or DELETE policy. **Ratings is
+neither secure nor implemented.**
+
+### Correction — Messaging has no status gating
+
+Recorded as current implementation reality:
+
+- `messages` INSERT and SELECT are **Booking-participant scoped** — both policies
+  subquery `bookings` for `worker_id ∪ client_id`
+- `sender_id` spoofing **is** prevented by `auth.uid() = sender_id` in the INSERT
+  `WITH CHECK`
+- **but the messaging policies carry no Booking-status predicate at all**
+
+Consequently, until BL-01C lands, participants can send messages in statuses beyond
+`confirmed`, including after a Booking is `cancelled` or `no_show`. The confirmed-only
+send rule locked in docs/DECISIONS.md is **not yet enforced**. Neither policy carries a
+`TO authenticated` clause, unlike the rest of the schema; both fail closed for `anon`
+because `auth.uid()` is NULL. `messages.is_read` has no UPDATE policy and therefore no
+maintenance path.
+
+### Still deferred after BL-01A
+
+No-show operational path, `strike_count` mutation, automatic third-strike suspension,
+refunds, automatic cancellation rematching, and the rating-received notification all
+remain deferred. No GAP number is created by BL-01A, and GAP-001 through GAP-004 are
+unchanged.
+
 Future gap template:
 
 ```
