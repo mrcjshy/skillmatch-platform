@@ -754,22 +754,71 @@ only `rated_by = auth.uid()` and does not enforce:
 SELECT remains authenticated-wide, and there is no UPDATE or DELETE policy. **Ratings is
 neither secure nor implemented.**
 
-### Correction — Messaging has no status gating
+### BL-01C Messaging security boundary — 2026-09-05
 
-Recorded as current implementation reality:
+Supersedes the earlier "Messaging has no status gating" correction, which recorded the
+pre-BL-01C state: participant-scoped and spoof-proof policies carrying **no** Booking-status
+predicate, both targeting role `public` rather than `authenticated`, over a table that still
+held the unnarrowed Supabase default ACL. Sends were possible in every status, including
+after a Booking was `cancelled` or recorded `no_show`.
 
-- `messages` INSERT and SELECT are **Booking-participant scoped** — both policies
-  subquery `bookings` for `worker_id ∪ client_id`
-- `sender_id` spoofing **is** prevented by `auth.uid() = sender_id` in the INSERT
-  `WITH CHECK`
-- **but the messaging policies carry no Booking-status predicate at all**
+Implemented reality after BL-01C (`20260905180000_bl01c_db_01_messaging_status_boundary.sql`):
 
-Consequently, until BL-01C lands, participants can send messages in statuses beyond
-`confirmed`, including after a Booking is `cancelled` or `no_show`. The confirmed-only
-send rule locked in docs/DECISIONS.md is **not yet enforced**. Neither policy carries a
-`TO authenticated` clause, unlike the rest of the schema; both fail closed for `anon`
-because `auth.uid()` is NULL. `messages.is_read` has no UPDATE policy and therefore no
-maintenance path.
+**Direct table privileges — narrowed.** `anon` holds **no privilege at all** on
+`public.messages`; its ACL entry is gone, so an anonymous read or write now fails at the
+GRANT layer rather than relying on `auth.uid()` being NULL. `authenticated` holds exactly
+**SELECT and INSERT**; UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER and MAINTAIN are all
+revoked. `REVOKE ALL` was used rather than an enumerated list so the end state does not
+depend on which privilege letters the server version supports — PostgreSQL 17's MAINTAIN
+was present in the pre-BL-01C ACL. `service_role` and the `postgres` owner entry are
+deliberately unchanged. This is the same GAP-004 discipline N12 applied to
+`public.notifications`: an unnecessary privilege is removed at the GRANT layer, not merely
+left unreachable behind the absence of a policy.
+
+**Both policies now target `TO authenticated`**, bringing `messages` in line with the rest
+of the schema. The policy inventory is exactly **one SELECT and one INSERT** — there is no
+UPDATE and no DELETE policy, so messages are **append-only**: no edit, delete or recall
+path exists for any caller.
+
+**SELECT — participant-only, status-independent.** A caller sees a message only if they are
+exactly that Booking's `worker_id` or `client_id`. It carries **no** Booking-status
+predicate, deliberately: history stays readable in `confirmed`, `completed`, `cancelled`
+and `no_show`, per the locked boundary in docs/DECISIONS.md. A non-participant receives
+zero rows rather than an error.
+
+**INSERT — the send boundary.** All five conjuncts are enforced server-side:
+
+- `auth.uid() = sender_id` — **sender spoofing is prevented**; combined with `sender_id`
+  being NOT NULL this also makes an anonymous send impossible
+- the caller is exactly this Booking's `worker_id` or `client_id`
+- the Booking status is **`confirmed`** — the conjunct BL-01C exists to add
+- `btrim(content) <> ''` — no empty or whitespace-only message
+- `length(content) <= 2000` — the locked maximum, in characters, rejected rather than
+  truncated
+
+Membership and status are read from **one** lookup of the Booking row, so the status can
+never be evaluated against a different row than the one membership was proven against.
+A rejected send is a single undifferentiated 42501: a non-`confirmed` Booking, a
+non-participant, a spoofed `sender_id` and over-length content are indistinguishable to the
+caller — the same anti-oracle discipline BL-01A applied by collapsing its cases into one
+SM409.
+
+The migration creates no table, column, index, constraint or trigger, so D-001 is
+untouched. Two Messaging policies replaced two Messaging policies, so the public policy
+count is unchanged at **25**.
+
+**Still a deferred gap: `messages.is_read`.** The column exists with its `false` default and
+has **no maintenance path** — no UPDATE policy and, after BL-01C, no UPDATE grant either, so
+it cannot be written by any client. Read receipts, message notification fan-out and Realtime
+all remain deferred and unimplemented.
+
+Local verification (13 migrations, clean reset): three allowed sends (Worker/`confirmed`,
+Client/`confirmed`, exactly 2000 characters) and fourteen denied cases — non-participant,
+`completed` (both participants), `cancelled`, `no_show`, `pending`, `sender_id` spoof, empty
+content, whitespace-only content, 2001 characters, `anon` send, and authenticated UPDATE /
+DELETE / `is_read` UPDATE. Both participants read history in all five statuses; a
+non-participant reads 0 rows; `anon` is refused at the GRANT layer. **Local only — the
+hosted project has not received this migration and remains at 12.**
 
 ### Still deferred after BL-01A
 

@@ -519,7 +519,7 @@ authoritative write:
 In short: completed notifies the Worker; cancelled notifies the counterparty. The actor
 is never notified of their own action. A rating-received notification remains deferred.
 
-#### Clarification — Messaging Send Boundary (2026-09-05) — LOCKED, NOT YET IMPLEMENTED
+#### Clarification — Messaging Send Boundary (2026-09-05) — LOCKED, IMPLEMENTED (BL-01C)
 D-003 already locks that messaging is Booking-scoped. This fixes the remaining question
 of *when* a participant may send:
 
@@ -531,10 +531,33 @@ This supersedes the earlier working suggestion that sends should also be allowed
 `completed`; that suggestion is retained nowhere as authoritative and is superseded by
 this entry.
 
-**This rule is not yet enforced.** The current `messages` policies scope INSERT and
-SELECT to Booking participants and prevent `sender_id` spoofing, but carry no
-Booking-status predicate at all, so sends are presently possible in every status.
-Closing that gap is BL-01C.
+**This rule is now enforced.** BL-01C recreated both `messages` policies `TO authenticated`
+and added the missing conjuncts to INSERT: the caller must be exactly this Booking's
+`worker_id` or `client_id`, the Booking must be `confirmed`, `auth.uid()` must equal
+`sender_id`, and the content must be non-blank and at most **2000 characters**. SELECT
+deliberately carries no status predicate, which is what keeps history readable after a
+terminal status. Membership and status are decided from one lookup of the Booking row.
+
+**Maximum message length: 2000 characters** — enforced in the INSERT `WITH CHECK` as
+`length(content) <= 2000`, measured in characters rather than bytes, and deliberately
+**not** added as a CHECK constraint: it is an application-authorization rule, not a data
+integrity invariant, and a constraint would be a schema change on a locked table. An
+over-length message is rejected, never truncated.
+
+BL-01C is implemented through direct INSERT under RLS rather than a send RPC. Membership
+and sender identity were already enforced correctly by the pre-existing policies; only the
+status conjunct was missing, so completing the predicate where it already lived was the
+narrower change than adding a SECURITY DEFINER surface and an EXECUTE grant to re-derive
+membership RLS already derives.
+
+**Deferred by BL-01C and NOT implemented:** `messages.is_read` maintenance (the column
+keeps its `false` default and has no UPDATE policy and no grant behind it, so it cannot be
+written at all), read receipts, message notification fan-out, and Realtime. There is no
+UPDATE and no DELETE policy, so messages are append-only — no edit, delete or recall path
+exists.
+
+As of this entry BL-01C is applied to the **local** database only; the hosted project has
+not received it, and hosted deployment is separately gated.
 
 ### D-004 — AI feature boundaries (2026-08-20) — LOCKED
 Skill gap: canonical result is a rule-based set difference — AI does not determine the
