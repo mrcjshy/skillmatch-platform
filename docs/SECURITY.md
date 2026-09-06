@@ -625,7 +625,13 @@ synchronization. No decision record (no D-010) is created either.
 
 Date: 2026-09-05. Records the security boundary of the two lifecycle RPCs added by
 `bl01a_db_01_booking_completion_cancellation`, plus two factual corrections to earlier
-carry-forwards. Local verification only; no hosted deployment is claimed.
+carry-forwards.
+
+**Status: DEPLOYED AND HOSTED-VERIFIED -- BL-01A is CLOSED.** The lifecycle migration
+`20260905160000_bl01a_db_01_booking_completion_cancellation.sql` is live on hosted and its
+hosted lifecycle behaviour is verified. No dedicated real-Expo native closure is claimed
+for BL-01A in this document. The BL-01D, BL-01B and BL-01C subsections below each carry
+their own status and are not covered by this line.
 
 ### Booking write surface
 
@@ -810,8 +816,23 @@ selection proven a true no-op by an unchanged row `xmin`. A forced parallel conf
 race produced one success and one `SM403`, with `payment_status = 'paid'` and **exactly
 one** notification. Direct writes as `authenticated` refused for `payment_method`,
 `payment_status`, `paymongo_ref`, INSERT and DELETE; `anon` refused entirely; an unrelated
-participant's Booking returns 0 rows. **Implemented and locally verified; NOT yet deployed
-to hosted, which remains at 14 migrations.**
+participant's Booking returns 0 rows.
+
+**Status: DEPLOYED AND CLOSED - 2026-09-06.** Hosted received
+`20260906093000_bl01d_db_01_cod_trusted_path.sql` via one
+`npx supabase db push --linked --skip-vault` preceded by a `--dry-run` scope gate, and now
+runs **15 migrations** at an unchanged 11 tables / 74 columns / 24 policies. Hosted
+behavioural and real native runtime evidence were both taken the same day. In the current
+Expo source under Expo Go, the owning Client selected COD in the app and the authoritative
+state became `(cod,'pending')`; the assigned Worker then confirmed cash receipt in the app
+and it became `(cod,'paid')`, with **exactly one** `payment_received` notification reaching
+the Client and the paid state surviving an authoritative refresh. On hosted, a repeat Client
+selection was again a true no-op by unchanged row `xmin`; a repeat Worker confirmation
+returned `SM403` with no second write and no second notification; and a proven participant's
+direct `UPDATE` of a payment column was refused `42501` at the table-privilege layer, before
+RLS -- the narrowing this migration introduced. The temporary Job, `job_skill`, Booking and
+four notifications were removed afterwards, restoring every lifecycle table to 0 rows with
+the protected `job_postings` fingerprint unchanged.
 
 **Still deferred:** refunds, payment reversal or edit, PayMongo/online settlement, and any
 payout logic.
@@ -877,8 +898,14 @@ GRANT layer; read visibility 1/1/2/0 for rater A, rater B, the rated Worker and 
 account. Aggregate: first rating exact, second exact mean, N11 live average agreeing within
 1e-6, and a forced two-Client lock-contention race producing no lost update. N8 regression:
 a rated Worker scored `13.33/20` from the maintained `rating_avg` while an unrated Worker
-scored the cold-start `12/20`. **Implemented and locally verified; NOT yet deployed to
-hosted, which remains at 13 migrations.**
+scored the cold-start `12/20`.
+
+**Status: DEPLOYED AND CLOSED.** `20260905220000_bl01b_db_01_ratings_trusted_path.sql` is
+live on hosted. Hosted behavioural verification passed, and real Expo Client runtime was
+proven: the Client submitted a rating from the app, the authoritative state refreshed to
+show it, and the Worker aggregate updated accordingly, while direct Rating writes stayed
+refused at the GRANT layer. The temporary fixtures were removed afterwards, restoring
+`ratings` to 0 rows and the Worker `rating_avg` to its entry baseline.
 
 **Still deferred:** rating-received notification, Worker→Client rating, rating edit/delete,
 and any rating management surface.
@@ -946,8 +973,19 @@ Client/`confirmed`, exactly 2000 characters) and fourteen denied cases — non-p
 `completed` (both participants), `cancelled`, `no_show`, `pending`, `sender_id` spoof, empty
 content, whitespace-only content, 2001 characters, `anon` send, and authenticated UPDATE /
 DELETE / `is_read` UPDATE. Both participants read history in all five statuses; a
-non-participant reads 0 rows; `anon` is refused at the GRANT layer. **Local only — the
-hosted project has not received this migration and remains at 12.**
+non-participant reads 0 rows; `anon` is refused at the GRANT layer.
+
+**Status: DEPLOYED AND CLOSED.**
+`20260905180000_bl01c_db_01_messaging_status_boundary.sql` is live on hosted. Hosted
+behavioural verification passed, and real Expo Worker and Client runtime was proven: both
+participants exchanged messages from the app on a `confirmed` Booking, and history stayed
+readable read-only after the Booking reached a terminal state. The locked rule is
+unchanged -- sending is permitted only while `Booking.status = 'confirmed'`, and terminal
+states keep history readable but not writable. The temporary fixtures were removed
+afterwards, restoring `messages` to 0 rows. Present-day hosted state is **15 migrations**
+and **24** public policies; the **25** recorded above was correct when BL-01C landed and
+was reduced to 24 by the later BL-01B Ratings migration, which replaced two Ratings
+policies with one.
 
 ### Still deferred after BL-01A
 
