@@ -518,7 +518,53 @@ cancelled Booking is retained as history and is never deleted.
 Completion itself does not mark anything paid, and BL-01A writes no payment column:
 `payment_method`, `payment_status` and `paymongo_ref` are preserved unchanged by both
 functions. Ordinary pre-defense cancellation happens before payment settlement, so it
-triggers no refund flow. Neither PayMongo nor COD is implemented.
+triggers no refund flow.
+
+#### Clarification — Cash on Delivery (2026-09-06) — LOCKED, IMPLEMENTED (BL-01D)
+
+**COD is implemented; PayMongo is still not.** BL-01D adds the cash half of the payment
+lifecycle using **only values the baseline schema already permits**, so it creates no
+table, column, constraint, index, trigger or enum and leaves D-001 untouched.
+
+- **Payment happens only after completion.** Both COD operations require
+  `bookings.status = 'completed'`; a `confirmed` Booking is not yet payable and
+  `cancelled` / `no_show` never become payable.
+- **The Client chooses; the assigned Worker attests.**
+  `public.select_my_booking_cod(p_booking_id)` is Client-only and
+  `public.confirm_my_cod_payment_received(p_booking_id)` is Worker-only. Each refuses
+  the other role at its account gate, so a Client can never mark their own Booking paid
+  and a Worker can never choose the Client's payment method.
+- **The state machine, in existing values only:**
+
+  ```
+  after N9 acceptance        (method NULL,  status 'pending')
+  after BL-01A completion    (method NULL,  status 'pending')   -- unchanged
+  Client selects COD         (method 'cod', status 'pending')
+  Worker confirms cash       (method 'cod', status 'paid')
+  ```
+
+- **Neither RPC accepts a payment value.** Each takes a Booking id and nothing else;
+  `rated`-style identity substitution is unrepresentable. `paymongo_ref` stays **NULL**
+  for COD, so a later PayMongo piece can use `gcash`/`maya` with a real reference beside
+  this without collision.
+- **Repeat behaviour is deliberately asymmetric.** Re-selecting COD on a Booking already
+  `(cod, pending)` is a **no-op**: it writes nothing and returns the current state,
+  because it is a restatement of the same choice rather than a second event. A repeated
+  Worker confirmation is **rejected with SM403** before any write or notification, so it
+  can neither pay twice nor notify twice. Every other repeat — already paid, another
+  method, refunded — conflicts with SM409.
+- **Exactly one `payment_received` notification** goes to the **Client** when cash is
+  confirmed, emitted inside the same transaction as the payment write, so a failed
+  notification rolls the settlement back. `payment_received` was already an allowed
+  notification type; nothing was added. **No notification is emitted when the Client
+  merely selects COD.**
+- **Direct participant Booking writes are denied at both layers.** BL-01D also narrows
+  `public.bookings` grants to `authenticated: SELECT only` / `anon: none`, closing the
+  last table still carrying the broad Supabase defaults.
+- **Refunds remain deferred** and `'refunded'` remains a value no code path produces.
+
+As of this entry BL-01D is implemented and **locally verified only**; the hosted project
+has not received it, and hosted deployment is separately gated.
 
 **No-show and strikes — DEFERRED PRE-DEFENSE.** The three-strike concept in the D-002
 amendment is unchanged and is not withdrawn. What is deferred is the *operational* path:

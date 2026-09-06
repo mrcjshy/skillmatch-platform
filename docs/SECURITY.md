@@ -745,6 +745,77 @@ schema-prevented**. No new constraint is needed for that case.
 
 The remaining gaps recorded here were closed by BL-01B; see the section below.
 
+### BL-01D COD trusted payment boundary — 2026-09-06
+
+Adds the cash half of the payment lifecycle. Uses only values the baseline schema already
+permits, so no table, column, constraint, index, trigger or enum is created and the public
+policy count is unchanged at **24** — this migration creates and drops no policy.
+
+**`public.bookings` grants narrowed.** Before BL-01D the table still carried the
+unnarrowed Supabase defaults (`anon` and `authenticated` both `arwdDxtm`) — the last table
+in the schema still doing so. Those grants were inert, because `bookings` has exactly one
+policy (participant SELECT) and RLS refuses every write with no matching policy, but
+BL-01D makes `payment_status = 'paid'` a real financial assertion, so the blast radius of
+one mistaken permissive UPDATE policy is materially larger than before. After this
+migration **`anon` holds no privilege at all** and **`authenticated` holds SELECT only**;
+`service_role` and the `postgres` owner entry are unchanged, and the participant SELECT
+policy is untouched. Verified: `authenticated` INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/
+TRIGGER/MAINTAIN all false.
+
+**Two trusted RPCs, one Booking row each.** Both are postgres-owned, `SECURITY DEFINER`,
+`SET search_path = ''`, every object schema-qualified, EXECUTE revoked from PUBLIC/`anon`/
+`service_role` and granted to `authenticated` only. Both take **a Booking id and nothing
+else** — there is no payment method, status, amount or reference parameter, so a caller
+cannot express "mark this paid" or name a provider.
+
+- **`select_my_booking_cod(uuid)` — Client only.** Active Client account required
+  (`42501`); then the Booking must exist, be the caller's, and be `completed` — all three
+  collapsed into one `SM409` so the function is not a Booking-existence oracle. The only
+  write it can perform is `payment_method = 'cod'` on a `(NULL, 'pending')` tuple.
+- **`confirm_my_cod_payment_received(uuid)` — assigned Worker only.** Active Worker
+  account required (`42501`); then the Booking must exist, name the caller as `worker_id`,
+  be `completed`, and already be `payment_method = 'cod'` — all four collapsed into one
+  `SM409`. That COD requirement is also the **PayMongo forward guard**: this function can
+  never settle a `gcash` or `maya` Booking. An already-paid Booking raises **`SM403`**
+  after participation is proven (mirroring the BL-01A paid guard), before any write and
+  before any notification.
+
+**Payment identities are derived, never supplied.** The Client is `auth.uid()`; the Worker
+and the notification recipient are read from the locked Booking row.
+
+**Confirmation and notification are atomic.** The Booking row is locked `FOR UPDATE`
+before any decision; `payment_status` is then set to `'paid'` and exactly one
+`payment_received` notification is emitted to the **Client** in the same transaction.
+`private.emit_notification` carries no exception handler, so a failed notification
+propagates and rolls the settlement back. Proven locally with a temporary diagnostic that
+forced the notification insert to fail: the RPC failed, `payment_status` stayed
+`'pending'`, and no notification row was created.
+
+**Invariants held by both functions.** Neither writes `bookings.status`, `completed_at`,
+`paymongo_ref`, or any `job_postings` column; neither creates a Rating or a Message nor
+changes `worker_profiles.rating_avg`. `paymongo_ref` remains NULL for COD.
+
+Local verification (15 migrations, clean reset): a full canonical lifecycle driven through
+the real trusted path — N9 acceptance producing `(NULL,'pending',NULL)`, BL-01A completion
+preserving it, Client selection producing `(cod,'pending')`, Worker confirmation producing
+`(cod,'paid')` with exactly one Client `payment_received` notification and no rating,
+message or Job change. Client matrix 13/13: allowed for the active owning Client on a
+completed Booking; `42501` for a Worker caller and for `anon`; `SM409` for a different
+Client, `confirmed`, `cancelled`, `no_show`, a nonexistent id, `cod+paid`, `gcash`, `maya`
+and `refunded`. Worker matrix 13/13: allowed for the assigned Worker on a completed COD
+Booking; `42501` for a Client caller and `anon`; `SM409` for a different Worker, a
+completed Booking with no method, `confirmed`, `cancelled`, `no_show`, a nonexistent id,
+`gcash`, `maya` and `refunded`; **`SM403`** for an already-paid own Booking. Repeat
+selection proven a true no-op by an unchanged row `xmin`. A forced parallel confirmation
+race produced one success and one `SM403`, with `payment_status = 'paid'` and **exactly
+one** notification. Direct writes as `authenticated` refused for `payment_method`,
+`payment_status`, `paymongo_ref`, INSERT and DELETE; `anon` refused entirely; an unrelated
+participant's Booking returns 0 rows. **Implemented and locally verified; NOT yet deployed
+to hosted, which remains at 14 migrations.**
+
+**Still deferred:** refunds, payment reversal or edit, PayMongo/online settlement, and any
+payout logic.
+
 ### BL-01B Ratings trusted write boundary — 2026-09-05
 
 Supersedes the Ratings carry-forward and the duplicate-prevention correction above, both of
