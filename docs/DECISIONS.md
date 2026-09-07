@@ -689,30 +689,56 @@ exposed and is distinct from the API secret key. The implementation must not sil
 adopt a differently named header: real test-mode webhook evidence must confirm the actual
 provider behaviour before PM-01 closure.
 
-**QR-07 — Duplicate-initiation ordering.** The correctness mechanism is the Booking row
-itself, in this order:
+**QR-07 — Atomic claim-and-bind ordering.** The Payment Intent is created **before** any
+Booking payment state is committed, and a single trusted DB operation performs the claim
+and the binding together. There is therefore **no intermediate committed
+`(qrph, pending, NULL)` state**: a Booking is either untouched or already bound to its
+authoritative Intent. The earlier claim-then-bind sequence is superseded, because a
+committed claim carrying no reference could strand a Booking with no durable recovery
+field available under the locked 11-table / 74-column model.
 
 ```
-1. trusted DB operation locks the Booking row
-2. require  payment_method = NULL, payment_status = pending, paymongo_ref = NULL,
-            Booking.status = completed, caller = owning active Client
-3. claim    payment_method = 'qrph', payment_status = pending, paymongo_ref = NULL
-4. COMMIT the claim
-5. create the PayMongo Payment Intent
-6. trusted bind: lock the row, require qrph/pending/NULL, validate the returned
-            Intent ID, store paymongo_ref
-7. COMMIT the bind
-8. only then create the QR Ph Payment Method and attach it to the bound Intent
-9. return the QR transiently
+1. the Edge Function authenticates the Client and validates the request
+2. read/prepare the Booking and derive the authoritative amount and currency
+3. create the PayMongo Payment Intent
+4. one trusted DB operation atomically locks the Booking and changes
+      (NULL, pending, NULL)  →  ('qrph', pending, <Payment Intent ID>)
+5. COMMIT that authoritative binding
+6. only after the DB binding succeeds, create the QR Ph Payment Method
+7. attach that Payment Method to the authoritative stored Payment Intent
+8. return the QR and test-mode information transiently
 ```
 
-Two concurrent Client taps cannot both claim the Booking, because step 2 is evaluated
-under the row lock. **No atomicity is claimed across PayMongo and Postgres.** A provider
-Intent created before a failed bind may become an orphan provider resource; that is
-accepted, because no payable QR is ever generated before the authoritative DB binding
-succeeds. Provider `Idempotency-Key` support may be used later as *secondary* retry
-protection only after its exact behaviour is confirmed against the current PayMongo API;
-it is explicitly **not** the correctness mechanism.
+**Invariants.**
+
+- No payable QR may be generated before the authoritative DB binding succeeds.
+- `paymongo_ref` remains the single authoritative Payment Intent ID.
+- An existing non-NULL `paymongo_ref` is **never** replaced.
+- A retry against an already-bound `qrph/pending` Booking **reuses the stored Intent**.
+- A concurrent losing request may leave an orphan Payment Intent.
+- A losing or orphan Intent must never be attached or exposed as the Booking's QR.
+- Orphan provider resources are accepted as the cross-system race and failure tradeoff.
+- **No cross-system atomicity is claimed** between PayMongo and Postgres.
+- PayMongo `Idempotency-Key` remains *secondary* protection only, never the correctness
+  mechanism, and only after its behaviour is confirmed against the current PayMongo API.
+
+**Concurrency, stated truthfully.** Two simultaneous taps may each reach step 3, so
+request A creates `pi_A` and request B creates `pi_B`. Both then contend for the same
+Booking row at step 4. A wins and the Booking becomes `qrph / pending / pi_A`; B acquires
+the lock afterwards, finds the method already set and `paymongo_ref` already non-NULL, and
+is refused — it must never replace `pi_A`. `pi_B` is left unattached and becomes an
+orphan. It is therefore **not** claimed that only one provider Intent can ever be created
+under a race. The guarantee is narrower and exact: **only one Intent can become the
+Booking's authoritative `paymongo_ref`, and no losing Intent ever becomes payable**,
+because attachment happens only at step 7 and only against the stored authoritative
+Intent.
+
+**Retry and crash recovery.** If the server dies after the binding commits but before the
+QR is attached, the Booking rests at `qrph / pending / pi_A`, which is a fully recoverable
+state rather than a stranded one. A later retry reads the stored `pi_A`, reuses it, creates
+a fresh QR Ph Payment Method if needed, and attaches it to `pi_A`. It must **not** create a
+replacement authoritative Payment Intent. This is the same rule QR-09 applies to ordinary
+QR expiry: the Payment Intent is stable, and only the QR is regenerated.
 
 **QR-08 — Duplicate webhook delivery.** Settlement takes a row lock and permits only
 `qrph/pending` — `qrph/paid`. The first valid provider success transitions once; a
