@@ -385,6 +385,14 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# PM-01B: QR Ph payment initiation, called by the signed-in Client from Expo.
+# verify_jwt stays true so the platform rejects unauthenticated calls; the
+# handler additionally resolves the real user, because a project anon key also
+# satisfies verify_jwt. The PM-01C provider webhook is a separate endpoint and
+# will need its own signature-based boundary, NOT this setting.
+[functions.initiate-qrph-payment]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327
