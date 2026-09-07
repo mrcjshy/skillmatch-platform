@@ -545,8 +545,10 @@ table, column, constraint, index, trigger or enum and leaves D-001 untouched.
 
 - **Neither RPC accepts a payment value.** Each takes a Booking id and nothing else;
   `rated`-style identity substitution is unrepresentable. `paymongo_ref` stays **NULL**
-  for COD, so a later PayMongo piece can use `gcash`/`maya` with a real reference beside
-  this without collision.
+  for COD, so a later PayMongo piece can carry a real reference beside this without
+  collision. That later piece was assumed here to be `gcash`/`maya`; for the defense
+  implementation that assumption is **superseded by the PM-01 QR Ph amendment below**,
+  which implements `qrph` instead. The `gcash` and `maya` schema values are retained.
 - **Repeat behaviour is deliberately asymmetric.** Re-selecting COD on a Booking already
   `(cod, pending)` is a **no-op**: it writes nothing and returns the current state,
   because it is a restatement of the same choice rather than a second event. A repeated
@@ -599,6 +601,205 @@ authoritative write:
 
 In short: completed notifies the Worker; cancelled notifies the counterparty. The actor
 is never notified of their own action. A rating-received notification remains deferred.
+
+#### PM-01 — PayMongo QR Ph Amendment (2026-09-07) — LOCKED
+
+**Nothing here is implemented.** This entry records the approved architecture for the
+online half of the payment lifecycle *before* any of it is built. No migration, Edge
+Function, provider credential or provider call exists yet, and every piece below carries
+its own separate authorization gate. The COD clarification above is unchanged and BL-01D
+remains closed on its own terms.
+
+**Implementation target — QR Ph.** The PayMongo account capability currently available
+to the project is **QR Ph**, so QR Ph is the online method implemented for the defense.
+`gcash` and `maya` are **not implemented for the defense**. They are not broken, not
+withdrawn, and not permanently unsupported — they are simply not built now, and they
+remain valid schema values for historical and forward compatibility. The distinction to
+carry forward is:
+
+```
+schema compatibility    gcash | maya | qrph | cod
+defense implementation                qrph | cod
+```
+
+COD remains independently closed and unchanged by this amendment.
+
+**QR-01 — Flow.** PayMongo **Dynamic QR Ph**: create a Payment Intent, create a QR Ph
+Payment Method, attach the Payment Method to that Intent, receive the QR action, and let
+the provider decide the outcome, which the server then verifies. Hosted Checkout is
+**not** the selected PM-01 architecture.
+
+**QR-02 — `paymongo_ref` invariant.** `bookings.paymongo_ref` always stores the PayMongo
+**Payment Intent ID** and never a Payment ID, Payment Method ID, QR image, `test_url`,
+`client_key`, webhook event ID or raw provider JSON. The Intent is the only identifier
+that already exists at initiation, survives QR expiry, and is the resource that both the
+attach call and reconciliation address. No fixed provider ID length is claimed: the
+returned Intent ID must be non-empty and must fit the existing `varchar(100)`, and the
+server **fails closed** if it does not. No column expansion is approved.
+
+**QR-03 — `payment_method` CHECK.** The future amendment is
+`payment_method IN ('gcash','maya','qrph','cod')` — adding only `qrph` and preserving
+`gcash`, `maya` and `cod`. Classification, stated precisely because the two are easy to
+conflate: **D-001 structural change not required** (no table added, no column added, no
+ERD relationship changed; the model stays 11 tables / 74 columns), **but a hosted schema
+CHECK amendment IS required** and needs its own separate mutation authorization. This is
+not a no-schema-change piece.
+
+**Locked online-payment lifecycle.** Using existing column values only:
+
+```
+after BL-01A completion      (NULL,   pending, NULL)
+Client initiates QR Ph       ('qrph', pending, <Payment Intent ID>)
+provider-confirmed success   ('qrph', paid,    <same Payment Intent ID>)
+```
+
+Throughout, `Booking.status` stays `completed`, `Job.status` stays `completed`, and
+`completed_at` is untouched. **Neither the Client nor the Worker may mark a QR Ph Booking
+paid.** Only trusted provider-verified server code performs `pending` — `paid`. This is
+the structural difference from COD, where the Worker attests physical cash.
+
+**QR-04 — Initiation boundary.** A **Supabase Edge Function**, conceptually
+`POST paymongo-qrph-initiate` taking **`booking_id` and nothing else**. The server derives
+caller identity, Client role, active status, Booking ownership, Booking lifecycle, the
+Job, the budget, the amount, the currency, the payment method and the payment state. The
+client may not supply `client_id`, `worker_id`, `amount`, `currency`, budget,
+`payment_status`, `paymongo_ref` or any PayMongo key. **All PayMongo calls remain
+server-side**, including the ones the provider would accept a public key for: the
+`client_key` is an Intent-scoped credential, and shipping it to the device would let a
+modified client drive the Intent outside our boundary while buying nothing — the device
+only needs the finished QR image.
+
+**Secret boundary — LOCKED.** The PayMongo API secret, the PayMongo webhook signing
+secret and any Supabase privileged secret are **server-side only**. None may ever appear
+in an `EXPO_PUBLIC_*` variable, the React Native bundle, the Vite bundle, AsyncStorage,
+Git, Git history, screenshots, reports, chat or client logs. Future secret names, recorded
+by name only: `PAYMONGO_SECRET_KEY`, `PAYMONGO_PUBLIC_KEY`, `PAYMONGO_WEBHOOK_SECRET`.
+Values are entered by Josh directly into the approved server-side secret store and are
+never transmitted to an agent.
+
+**QR-05 / QR-06 — Webhook boundary and signature.** A **separate** Edge Function with
+`verify_jwt = false`, because PayMongo holds no Supabase user JWT — the PayMongo
+signature *is* the provider authentication. Required order, non-negotiable: read the raw
+request body, read the signature, verify it, reject on mismatch, and only then parse or
+process. The signature contract as currently documented: header `Paymongo-Signature` with
+parts `t`, `te` and `li`; signed material `timestamp + "." + rawBody`; algorithm
+**HMAC-SHA256** keyed with the per-endpoint webhook signing secret; compare `te` in test
+mode and `li` in live mode, using a timing-safe comparison. The signing secret is never
+exposed and is distinct from the API secret key. The implementation must not silently
+adopt a differently named header: real test-mode webhook evidence must confirm the actual
+provider behaviour before PM-01 closure.
+
+**QR-07 — Duplicate-initiation ordering.** The correctness mechanism is the Booking row
+itself, in this order:
+
+```
+1. trusted DB operation locks the Booking row
+2. require  payment_method = NULL, payment_status = pending, paymongo_ref = NULL,
+            Booking.status = completed, caller = owning active Client
+3. claim    payment_method = 'qrph', payment_status = pending, paymongo_ref = NULL
+4. COMMIT the claim
+5. create the PayMongo Payment Intent
+6. trusted bind: lock the row, require qrph/pending/NULL, validate the returned
+            Intent ID, store paymongo_ref
+7. COMMIT the bind
+8. only then create the QR Ph Payment Method and attach it to the bound Intent
+9. return the QR transiently
+```
+
+Two concurrent Client taps cannot both claim the Booking, because step 2 is evaluated
+under the row lock. **No atomicity is claimed across PayMongo and Postgres.** A provider
+Intent created before a failed bind may become an orphan provider resource; that is
+accepted, because no payable QR is ever generated before the authoritative DB binding
+succeeds. Provider `Idempotency-Key` support may be used later as *secondary* retry
+protection only after its exact behaviour is confirmed against the current PayMongo API;
+it is explicitly **not** the correctness mechanism.
+
+**QR-08 — Duplicate webhook delivery.** Settlement takes a row lock and permits only
+`qrph/pending` — `qrph/paid`. The first valid provider success transitions once; a
+repeated valid delivery finds the Booking already paid, acknowledges, and performs no
+second write and no duplicate side effect. **No webhook-events table pre-defense.** A
+durable provider-event ledger would require a separate D-001 structural decision and is
+deferred.
+
+**QR-09 — Expiry and QR regeneration.** QR expiry does **not** create a replacement
+Payment Intent. The Booking keeps the same `paymongo_ref`, the same Payment Intent and the
+same `qrph/pending` state. Recovery is to create a **new QR Ph Payment Method and attach
+it to the same Payment Intent**, yielding a fresh QR. There is no new `payment_status`, no
+new `paymongo_ref`, no replacement Intent and no method switch. This preserves the
+one-Booking / one-Intent invariant, which is also what keeps a late webhook for a
+superseded resource from ever being possible.
+
+**QR-10 — First payment method selection locks the method.** From `NULL/pending` the
+Client may choose either `cod/pending` or `qrph/pending`. After either selection, COD
+— QR Ph switching is **not permitted pre-defense**, and after `paid` a method change is
+impossible. No fallback switching semantics are added. The deployed COD path already
+behaves this way, since `select_my_booking_cod` requires a NULL method and conflicts
+otherwise.
+
+**QR-11 — No QR Ph payment notification pre-defense.** The locked `payment_received`
+semantics were defined for COD, where the **Worker** attests that cash was received and
+the **Client** is the party learning something new. QR Ph is provider-confirmed and the
+Client is the payer, so reusing that notification would be misleading without a separate
+product decision. Therefore: **no new notification type, and no existing notification type
+reused for QR Ph.** Success is communicated through the authoritative Booking payment
+state that both roles already read. COD notification behaviour is unchanged.
+
+**QR-12 — Test-mode defense procedure.** **PayMongo test mode only.** PayMongo's own
+testing guidance warns that test-mode QR Ph generates authentic QR codes and that scanning
+and paying one processes a real transaction. Hard rule for development and defense:
+**do not scan the generated QR** with GCash, Maya, a banking app or any real payment
+application, and **do not send real money**. Outcomes are simulated using the PayMongo
+`test_url` returned with the QR. The exact response path holding `test_url` is an
+implementation-time fact to read from a real test-mode response and is deliberately not
+invented here. The resulting demonstration is classified as a **genuine PayMongo
+test-mode integration — not a mock, and not a real-money transaction**.
+
+**QR-13 — Amount binding.** The payable amount is **derived server-side only**, from
+`Booking` — `job_id` — the authoritative `Job.budget` — PHP centavos. `job_postings.budget`
+is `numeric(10,2)` and nullable with `CHECK (budget >= 0)`, so the conversion must use
+exact numeric arithmetic, convert to integer/bigint centavos, and reject NULL, reject
+anything below the PHP 1.00 provider minimum, and reject an out-of-range or
+provider-invalid amount. Floating-point conversion is forbidden. The client never supplies
+the amount, and settlement or reconciliation recomputes it and compares it against the
+provider amount rather than trusting the event.
+
+**Provider-to-Booking binding.** A valid PayMongo signature proves only that PayMongo sent
+the event — never that a particular Booking may be marked paid. Settlement must
+independently establish that the Booking exists, `Booking.status = 'completed'`,
+`payment_method = 'qrph'`, the payment state is `pending` (or already `paid`, for
+repeat handling), the stored `paymongo_ref` matches the authoritative provider resource,
+the currency is PHP, the provider amount equals the server-derived Job amount, and the
+provider state is a genuine successful QR Ph payment. Provider metadata or reference
+fields may serve as **correlation only, never as authorization**.
+
+**QR-14 — Server-side reconciliation.** A **Refresh Payment Status** control is backed by
+a trusted server endpoint that reads the stored Payment Intent ID, retrieves the
+authoritative Intent from PayMongo, verifies the amount, currency and resource binding,
+and — only if the provider reports success — invokes the same guarded settlement path;
+otherwise the Booking stays `pending`. The Client may request a refresh but may never
+assert payment. The webhook remains the normal provider-driven path; reconciliation is the
+recovery and defense path, and both converge on one settlement routine.
+
+**QR-15 — D-001 determination.** **D-001 structural change not required.** The model
+remains **11 tables / 74 columns**. No payment table, payment-attempt table,
+webhook-events table, new Booking column or new Job column is approved. The only approved
+DB-definition amendment for PM-01 is adding `qrph` to `bookings_payment_method_check`, and
+even that requires its own separate authorization.
+
+**D-009 preserved.** Operational payment logic lives entirely in the Expo application and
+the Supabase trusted server boundary. The React/Vite application remains public
+landing/information only and gains no payment or authentication logic. Dynamic QR Ph needs
+no redirect return page, so none is introduced.
+
+**Deferred — PM-01 reopens none of these:** GCash implementation, Maya implementation,
+refund processing, payment reversal, payment-method switching after selection, a
+webhook-event ledger, live payments, real-money testing, online payment notifications, EAS
+Update, Socket.IO, Realtime chat, no-show automation and automatic rematching.
+
+**Intended implementation sequence (planning only, nothing authorized by this entry):**
+`PM-01A` DB trusted boundary and the `qrph` CHECK amendment — `PM-01B` QR Ph initiation
+Edge Function — `PM-01C` webhook and reconciliation boundary — `PM-01D` native QR Ph UI
+— `PM-01E` hosted and native PayMongo test-mode closure.
 
 #### Clarification — Messaging Send Boundary (2026-09-05) — LOCKED, IMPLEMENTED (BL-01C)
 D-003 already locks that messaging is Booking-scoped. This fixes the remaining question
