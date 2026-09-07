@@ -393,6 +393,24 @@ deno_version = 2
 [functions.initiate-qrph-payment]
 verify_jwt = true
 
+# PM-01C: the PayMongo webhook. verify_jwt is FALSE because the caller is
+# PayMongo, which holds no Supabase user JWT -- platform verification cannot
+# be the boundary here. The provider SIGNATURE is: the handler verifies
+# HMAC-SHA256 over `<t>.<raw body>` against the Paymongo-Signature header
+# BEFORE parsing the body, before any database read and before any provider
+# call. This setting is not a relaxation of the QR Ph trust model; it moves
+# the check from the platform to a stronger, payload-bound one.
+[functions.paymongo-webhook]
+verify_jwt = false
+
+# PM-01C: client-driven settlement refresh, called by the signed-in Client
+# from Expo. Same posture as initiate-qrph-payment: verify_jwt stays true so
+# the platform rejects unauthenticated calls, and the handler additionally
+# resolves the real user, because a project anon key also satisfies
+# verify_jwt.
+[functions.reconcile-qrph-payment]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327
