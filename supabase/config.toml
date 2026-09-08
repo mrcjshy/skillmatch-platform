@@ -411,6 +411,12 @@ verify_jwt = false
 [functions.reconcile-qrph-payment]
 verify_jwt = true
 
+# AI-SVC-01: optional Skill Gap guidance for signed-in Workers. Platform JWT
+# verification is paired with auth.getUser() and caller-scoped RLS reads in
+# the handler; no privileged database client is used.
+[functions.skillmatch-ai]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327
