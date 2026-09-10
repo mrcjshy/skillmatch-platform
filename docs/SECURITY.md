@@ -987,6 +987,54 @@ and **24** public policies; the **25** recorded above was correct when BL-01C la
 was reduced to 24 by the later BL-01B Ratings migration, which replaced two Ratings
 policies with one.
 
+### R3 user reports security boundary — 2026-09-10
+
+Source-only at this record. The contract lives in
+`supabase/migrations/20260910183000_r3_db_01_user_reports.sql` and the D-001 amendment
+in `docs/DECISIONS.md`. This section does not claim hosted apply, hosted RLS-matrix
+pass, or runtime proof.
+
+**Table and direct access.** `public.reports` has RLS enabled. `PUBLIC` and `anon` are
+revoked entirely. `authenticated` holds **SELECT only** — no INSERT, UPDATE, or DELETE
+grant. There is no user UPDATE or DELETE policy. Direct user writes therefore fail at
+the GRANT layer before RLS is consulted.
+
+**Reporter-only SELECT.** The single policy is `reporter_id = auth.uid()`,
+`TO authenticated`. The reported party receives **zero rows**. Unrelated callers
+receive zero rows. There is no Admin table-wide SELECT policy; Administrators do not
+read this table through PostgREST.
+
+**Server-derived counterpart identity.** `public.submit_my_booking_report` accepts
+Booking, category, and description only. `reporter_id` is `auth.uid()`.
+`reported_user_id` is the opposite Booking participant. Callers cannot supply
+`reporter_id`, `reported_user_id`, `status`, or Admin fields.
+
+**Submission writers.** Both submit RPCs are postgres-owned, `SECURITY DEFINER`,
+`SET search_path = ''`, EXECUTE revoked from PUBLIC / `anon` / `service_role` and
+granted to `authenticated` only. Authorization is **role-based**: an authoritative
+`public.users` row for `auth.uid()` whose `role` is `worker` or `client`. Inactive
+accounts retain reporting access — the RPCs do not call `private.is_active_worker()` or
+`private.is_active_client()`, and they do not read `users.is_active`. Administrators
+using a user submit RPC receive `42501`.
+
+**Narrow Admin RPC boundary.** `list_reports`, `get_report`, and `review_report` require
+`private.is_admin()` internally (`42501` otherwise). List/detail project names, ids,
+category, status, description (detail only), optional job title, and Admin lifecycle
+fields. They do not project phone, email, exact address, or message history.
+
+**No Admin-wide message access.** This migration adds no messages SELECT policy, no
+message dump inside `get_report()`, no evidence column, and no attachment logic.
+Historical report-scoped Admin message evidence remains R3B.
+
+**No automatic punishment.** `review_report` updates only `reports.status`,
+`admin_response`, `reviewed_by`, and `reviewed_at`. It does not mutate
+`public.users.is_active`, `worker_profiles.strike_count`, `bookings.status`,
+`job_postings.status`, ratings, or payments. Submit RPCs insert a `reports` row and
+nothing else.
+
+**Notifications unchanged.** R3 does not modify `notifications_type_check` and does not
+emit report notification types.
+
 ### Still deferred after BL-01A
 
 No-show operational path, `strike_count` mutation, automatic third-strike suspension,

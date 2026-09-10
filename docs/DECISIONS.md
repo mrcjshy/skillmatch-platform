@@ -10,6 +10,52 @@ derived from code.
 No new tables or columns without explicit approval. The capstone schema is fixed at
 the 11 tables in the live baseline migration.
 
+#### Amendment — `public.reports` as 12th application table (2026-09-10) — LOCKED
+
+Josh-approved R3 contract. `public.reports` is now an approved 12th application table.
+
+Reason: user reporting and Administrator review is approved pre-defense scope.
+
+This amendment does not automatically classify ERD / DFD / manuscript content as
+requiring immediate revision. Diagram and manuscript consistency is evaluated
+separately after implementation freeze.
+
+No automatic punishment, suspension, or strike behavior is introduced.
+
+Locked R3 contract:
+
+- Counterpart reports are Booking-bound. A Worker may report only the Client, and a
+  Client only the Worker, from a Booking they actually participate in.
+  `reported_user_id` is always server-derived from that Booking. Counterpart reports
+  are allowed only when authoritative Booking status is `confirmed`, `completed`, or
+  `cancelled`; `pending` and `no_show` are denied. The report category `no-show` does
+  not require Booking status `no_show`. There is no reporting time limit.
+- App issues are general: no Booking, no reported user, category fixed to `app_issue`.
+- Reporting eligibility is role-based (`users.role` is `worker` or `client`). Inactive
+  Worker and Client accounts (`users.is_active = false`) may still submit legitimate
+  reports. Submission is not gated through `private.is_active_worker()` or
+  `private.is_active_client()`.
+- Report statuses are `submitted` (default), `under_review`, `resolved`, `dismissed`.
+- Duplicate active counterpart reports are database-enforced: unique
+  `(reporter_id, booking_id)` where `booking_id IS NOT NULL` and status is
+  `submitted` or `under_review`. After `resolved` or `dismissed`, a new report for
+  that Booking may be submitted. App issues remain repeatable.
+- The reported party cannot read the report. Direct SELECT is reporter-only.
+- Administrators use narrow RPCs (`list_reports`, `get_report`, `review_report`). There
+  is no Admin table-wide SELECT policy on `public.reports`.
+- R3 creates no notification types and emits no report notifications.
+- Admin response is mandatory and nonblank (1..2000) on `resolved` / `dismissed`;
+  optional on `under_review`.
+- Report-scoped Admin message evidence is deferred to R3B. R3 does not grant Admin
+  general message access.
+
+This belongs as the D-001 amendment / R3 dated contract note. It is not a new
+decision id.
+
+Effective status of D-001 from this amendment onward: LOCKED as amended. The original
+11-table line above is retained for append-only provenance but is superseded by this
+amendment for application-table count.
+
 ### D-002 — Two-stage matching (2026-08-20) — LOCKED
 Stage 1 eligibility filter: matching required skill, worker availability, account
 active / not suspended. Stage 2 weighted ranking: 40 skill / 30 location /
