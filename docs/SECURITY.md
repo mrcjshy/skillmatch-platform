@@ -502,13 +502,20 @@ that need. Explicitly:
   Booking-id parameter
 - only owned Bookings are returned, in every status
 - counterparty contact/profile release is **live status-gated**: released while
-  `confirmed` or `completed`, suppressed for `pending`, `cancelled` and `no_show`
-- suppressed states expose no counterparty contact or profile data; the Client-facing
-  Worker profile block is gated as one unit
+  `confirmed` only (R3B amendment; N11 originally also released `completed`)
+- suppressed states (`completed`, `cancelled`, `pending`, `no_show`) expose no
+  counterpart contact or profile data; the Client-facing Worker profile block is
+  gated as one unit
+- exact `job_address` is projected only while `confirmed`; `job_barangay` and
+  `job_city` remain on history rows
+- counterpart UUIDs remain projected in every status
 - **email and `verified_by` are excluded** from both projections
 - rating aggregates are computed from `public.ratings`, not from the unmaintained
   `worker_profiles.rating_avg`; an unrated Worker yields count `0` and average `NULL`,
   never an actual `0` and never the neutral `3.0` matching constant
+- **`public.job_postings` SELECT is not redesigned.** Authenticated-wide job read
+  remains an acknowledged residual. R3B does not claim absolute database-level secrecy
+  of job address.
 
 ### N12 — notification spoofing carry-forward: CLOSED
 
@@ -936,11 +943,12 @@ of the schema. The policy inventory is exactly **one SELECT and one INSERT** —
 UPDATE and no DELETE policy, so messages are **append-only**: no edit, delete or recall
 path exists for any caller.
 
-**SELECT — participant-only, status-independent.** A caller sees a message only if they are
-exactly that Booking's `worker_id` or `client_id`. It carries **no** Booking-status
-predicate, deliberately: history stays readable in `confirmed`, `completed`, `cancelled`
-and `no_show`, per the locked boundary in docs/DECISIONS.md. A non-participant receives
-zero rows rather than an error.
+**SELECT — participant-only, status-independent (BL-01C).** A caller sees a message only if they are
+exactly that Booking's `worker_id` or `client_id`. BL-01C carried **no** Booking-status
+predicate, deliberately: history stayed readable in `confirmed`, `completed`, `cancelled`
+and `no_show`. A non-participant receives zero rows rather than an error. **R3B amends
+the live SELECT rule** to confirmed-only; see “R3B terminal privacy and report-scoped
+evidence — 2026-09-11”.
 
 **INSERT — the send boundary.** All five conjuncts are enforced server-side:
 
@@ -979,13 +987,56 @@ non-participant reads 0 rows; `anon` is refused at the GRANT layer.
 `20260905180000_bl01c_db_01_messaging_status_boundary.sql` is live on hosted. Hosted
 behavioural verification passed, and real Expo Worker and Client runtime was proven: both
 participants exchanged messages from the app on a `confirmed` Booking, and history stayed
-readable read-only after the Booking reached a terminal state. The locked rule is
-unchanged -- sending is permitted only while `Booking.status = 'confirmed'`, and terminal
-states keep history readable but not writable. The temporary fixtures were removed
-afterwards, restoring `messages` to 0 rows. Present-day hosted state is **15 migrations**
-and **24** public policies; the **25** recorded above was correct when BL-01C landed and
-was reduced to 24 by the later BL-01B Ratings migration, which replaced two Ratings
-policies with one.
+readable read-only after the Booking reached a terminal state. That was the BL-01C live
+rule at closure. R3B later amends ordinary SELECT to confirmed-only; the BL-01C hosted
+proof above is provenance, not the current contract. Sending remains permitted only
+while `Booking.status = 'confirmed'`. The temporary fixtures were removed afterwards,
+restoring `messages` to 0 rows at that closure. Present-day hosted state at BL-01C
+closure recording is **15 migrations** and **24** public policies; the **25** recorded
+above was correct when BL-01C landed and was reduced to 24 by the later BL-01B Ratings
+migration, which replaced two Ratings policies with one.
+
+### R3B terminal privacy and report-scoped evidence — 2026-09-11
+
+Source-only at this record. The contract lives in
+`supabase/migrations/20260911100000_r3b_db_01_terminal_privacy.sql` and the 2026-09-11
+clarifications in `docs/DECISIONS.md`. This section does not claim hosted apply, hosted
+RLS-matrix pass, or runtime proof.
+
+**N11 projection amendment.** Both participant list RPCs keep their signatures and
+return every owned Booking. Counterpart contact/profile fields and exact `job_address`
+are released only while `confirmed`. `completed` / `cancelled` history remains listable
+with those fields NULL. `job_barangay` / `job_city` and counterpart UUIDs remain.
+Confirmed behavior is unchanged.
+
+**Ordinary message SELECT.** The participant SELECT policy now also requires
+`bookings.status = 'confirmed'`. `completed`, `cancelled`, `pending`, and `no_show`
+return zero rows to ordinary callers. INSERT is unchanged. There is still no UPDATE or
+DELETE policy and no message-deletion trigger. Historical rows remain stored.
+
+**No Admin table SELECT.** R3B does not add a `public.messages` SELECT policy for
+Administrators.
+
+**Report-scoped evidence RPC.** `public.get_report_booking_messages(p_report_id uuid)`
+is `SECURITY DEFINER` with `SET search_path = ''`. `private.is_admin()` or 42501. NULL
+id is 22023. Missing report, app issue, and any `booking_id` NULL context share one
+SM409. Scope is `reports.booking_id` only. Result columns are `message_id`,
+`sender_role` (`worker` / `client`), `content`, and `created_at`, ordered
+`created_at ASC, id ASC`. No sender UUID, name, phone, email, address, or `is_read`.
+EXECUTE is revoked from PUBLIC / `anon` / `service_role` and granted to
+`authenticated` only.
+
+**job_postings residual.** This piece does not change
+`Anyone authenticated can read open jobs` (`USING (true)`). Suppressing `job_address`
+in the participant Booking RPCs is the authoritative list/detail projection hardening.
+It is not absolute database-level secrecy of job address.
+
+**R3 unchanged.** Submit, list, get, and review RPCs, the reports table, report
+lifecycle, notifications, and punishment behavior are not modified. `no_show` remains
+producerless.
+
+**D-001 / ERD.** No table, column, index, constraint, or trigger is added. Structural
+ERD impact is none.
 
 ### R3 user reports security boundary — 2026-09-10
 
@@ -1022,9 +1073,10 @@ using a user submit RPC receive `42501`.
 category, status, description (detail only), optional job title, and Admin lifecycle
 fields. They do not project phone, email, exact address, or message history.
 
-**No Admin-wide message access.** This migration adds no messages SELECT policy, no
+**No Admin-wide message access.** R3 adds no messages SELECT policy, no
 message dump inside `get_report()`, no evidence column, and no attachment logic.
-Historical report-scoped Admin message evidence remains R3B.
+Historical report-scoped Admin message evidence was deferred to R3B and is now
+the separate function `public.get_report_booking_messages(uuid)`.
 
 **No automatic punishment.** `review_report` updates only `reports.status`,
 `admin_response`, `reviewed_by`, and `reviewed_at`. It does not mutate

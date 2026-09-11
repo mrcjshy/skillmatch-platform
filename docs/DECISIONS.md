@@ -56,6 +56,16 @@ Effective status of D-001 from this amendment onward: LOCKED as amended. The ori
 11-table line above is retained for append-only provenance but is superseded by this
 amendment for application-table count.
 
+#### Clarification — R3B report-scoped message evidence (2026-09-11) — LOCKED
+
+The R3 bullet above that deferred Admin message evidence is now implemented by
+`public.get_report_booking_messages(uuid)`. No 13th table is added. D-001 application-
+table count remains 12. R3 submit/list/get/review RPCs and `public.reports` are
+unchanged. Administrators still have no `public.messages` table SELECT policy. The
+client supplies only a report id; the function derives `reports.booking_id` and returns
+only that Booking's stored messages as `message_id`, `sender_role`, `content`, and
+`created_at`. App-issue and other `booking_id` NULL contexts receive collapsed SM409.
+
 ### D-002 — Two-stage matching (2026-08-20) — LOCKED
 Stage 1 eligibility filter: matching required skill, worker availability, account
 active / not suspended. Stage 2 weighted ranking: 40 skill / 30 location /
@@ -509,11 +519,22 @@ Contract:
 Ownership and status are therefore separate axes. Release states are `confirmed` and
 `completed`; `pending`, `cancelled` and `no_show` suppress.
 
-Privacy boundaries:
+#### Clarification — R3B terminal contact and address projection (2026-09-11) — LOCKED
 
-- Worker-facing list: Client `full_name` and `phone` released in released states only.
+The N11 release states above are superseded for live projection. Counterpart
+contact/profile fields are now released **only while `confirmed`**. `completed` and
+`cancelled` history rows remain listable, but personal name, phone, and the Client-facing
+Worker profile block are NULL. Exact `job_address` is projected only while `confirmed`;
+`job_barangay` and `job_city` remain on terminal rows. Counterpart UUIDs stay projected
+so existing mobile row coercion cannot drop history rows. Email remains never projected.
+This does not change `public.job_postings` RLS; authenticated-wide job SELECT remains an
+acknowledged residual.
+
+Privacy boundaries (live after the 2026-09-11 clarification above):
+
+- Worker-facing list: Client `full_name` and `phone` released while `confirmed` only.
   Client email is never projected.
-- Client-facing list: the approved Worker profile block released in released states only,
+- Client-facing list: the approved Worker profile block released while `confirmed` only,
   gated as one unit so no field can leak while a sibling is suppressed. Worker email is
   never projected, and neither is `verified_by`.
 - Worker skill projection: NULL when suppressed; an empty array when released for a
@@ -912,6 +933,26 @@ exists.
 
 As of this entry BL-01C is applied to the **local** database only; the hosted project has
 not received it, and hosted deployment is separately gated.
+
+#### Clarification — R3B ordinary message SELECT is confirmed-only (2026-09-11) — LOCKED
+
+The BL-01C sentence that message **history remains readable** after a terminal status is
+superseded for ordinary participant access. The historical implementation and hosted
+proof of that earlier rule are retained as provenance; they are not the live contract.
+
+Live rule:
+
+- messages may still be **sent only while the Booking status is `confirmed`** (unchanged)
+- ordinary participant **SELECT is available only while the Booking is `confirmed`**
+- after `completed` / `cancelled` (and likewise `pending` / `no_show`), historical
+  messages **remain stored** but ordinary participant SELECT returns zero rows
+- Admin historical access, when a Booking-bound report exists, is only through
+  `public.get_report_booking_messages(uuid)`
+- there is still no Admin `public.messages` table SELECT policy, no UPDATE policy, and
+  no DELETE policy
+
+`no_show` remains producerless. This amendment does not add a no-show producer and does
+not change R3 reporting rules.
 
 ### D-004 — AI feature boundaries (2026-08-20) — LOCKED
 Skill gap: canonical result is a rule-based set difference — AI does not determine the
