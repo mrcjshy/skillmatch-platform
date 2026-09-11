@@ -1038,6 +1038,53 @@ producerless.
 **D-001 / ERD.** No table, column, index, constraint, or trigger is added. Structural
 ERD impact is none.
 
+### R4 Job posting-time payment intent — 2026-09-11
+
+Source-only at this record. The contract lives in
+`supabase/migrations/20260911120000_r4_db_01_job_payment_intent.sql` and the 2026-09-11
+R4 clarifications in `docs/DECISIONS.md`. This section does not claim hosted apply,
+hosted RLS-matrix pass, or runtime proof.
+
+**Column.** `public.job_postings.payment_method` is `varchar(20)`, **NULLABLE, no
+DEFAULT**. Allowed values `cod` | `qrph`. NULL is legacy compatibility only and is not
+backfilled. Table count stays **12**. Booking payment columns are unchanged.
+
+**New INSERT.** Policy `"Active clients can insert their own jobs"` still requires
+`private.is_active_client()` and `client_id = auth.uid()`, and additionally requires
+`payment_method IN ('cod','qrph')`. A NULL method on a new authenticated INSERT is
+denied. Invalid methods are denied by that WITH CHECK and by
+`job_postings_payment_method_check`.
+
+**QR Ph budget.** `job_postings_qrph_budget_check` requires
+`(payment_method IS DISTINCT FROM 'qrph') OR (budget IS NOT NULL AND budget >= 1.00)`.
+The `IS DISTINCT FROM` / `IS NOT NULL` form is load-bearing: a CHECK of
+`payment_method <> 'qrph' OR budget >= 1` would accept a `qrph` + NULL-budget row
+because CHECK treats UNKNOWN as pass. Cash Jobs keep existing optional `budget >= 0`
+semantics.
+
+**Immutability.** `public.guard_job_postings_payment_method()` is `SECURITY INVOKER`,
+`SET search_path = ''`, BEFORE UPDATE FOR EACH ROW. Any `payment_method IS DISTINCT
+FROM` change raises `42501`, including legacy NULL → `cod`/`qrph`. Trusted lifecycle
+RPCs UPDATE `status` only and are not blocked. EXECUTE is revoked from PUBLIC / `anon`
+/ `authenticated` / `service_role`.
+
+**Opportunity RPC.** `public.list_my_job_opportunities()` was DROP/CREATE (no CASCADE)
+to add `payment_method`. Preserved: owner `postgres`, `STABLE`, `SECURITY DEFINER`,
+empty `search_path`, authenticated-only EXECUTE (PUBLIC / `anon` / `service_role`
+revoked). Still withholds exact address and Client identity/contact. Scorer unchanged.
+
+**Acceptance.** `public.accept_job_opportunity` is not modified. The Booking still
+begins as `(payment_method NULL, payment_status 'pending', paymongo_ref NULL)`.
+
+**Payment enforcement.** `select_my_booking_cod` SM409s when the Job method is `qrph`.
+`prepare_booking_qrph` and `claim_and_bind_booking_qrph` SM409 when the Job method is
+`cod`. Legacy NULL Jobs keep the previous dual choice. FRESH QR Ph remains
+`(NULL, pending, NULL)`; claim/bind still writes method and `paymongo_ref` in one
+statement. Edge Function request contracts are unchanged. Job posting performs zero
+provider calls.
+
+**R4B.** Post-Booking payment-method switching / agreement is not implemented.
+
 ### R3 user reports security boundary — 2026-09-10
 
 Source-only at this record. The contract lives in

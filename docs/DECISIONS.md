@@ -66,6 +66,29 @@ client supplies only a report id; the function derives `reports.booking_id` and 
 only that Booking's stored messages as `message_id`, `sender_role`, `content`, and
 `created_at`. App-issue and other `booking_id` NULL contexts receive collapsed SM409.
 
+#### Clarification — R4 Job posting-time payment intent (2026-09-11) — LOCKED
+
+Josh-approved R4-DB contract. `public.job_postings.payment_method` is an approved
+nullable column. **No 13th table.** D-001 application-table count remains **12**. This is
+a column / constraint / function amendment, not a new entity.
+
+Stored values: `cod` | `qrph`. UI mapping (native, later): `cod` → Cash, `qrph` → QR Ph.
+`gcash` and `maya` are **not** Job-level values. The column is **NULLABLE with no
+DEFAULT**. Existing Jobs are **not** backfilled; NULL is legacy compatibility only and
+is not evidence of a posting-time choice even when a later Booking settled as COD or
+QR Ph.
+
+New authenticated Client INSERTs must supply `cod` or `qrph`. A QR Ph Job also requires
+`budget IS NOT NULL` and `budget >= 1.00`. Cash Jobs keep the existing budget semantics
+(optional, `>= 0`). After INSERT the Job method is **immutable**, including while
+`status = 'open'`. R4 adds no conversion path from a legacy NULL Job to `cod`/`qrph`.
+R4B switching / agreement remains separate.
+
+This column is posting-time **intent**. `bookings.payment_method` remains the
+claimed / processing payment state. Worker acceptance does **not** copy Job intent onto
+the Booking. Trusted payment RPCs enforce a non-NULL Job intent; legacy NULL Jobs retain
+the old post-completion dual choice.
+
 ### D-002 — Two-stage matching (2026-08-20) — LOCKED
 Stage 1 eligibility filter: matching required skill, worker availability, account
 active / not suspended. Stage 2 weighted ranking: 40 skill / 30 location /
@@ -228,6 +251,20 @@ The Worker-facing projection is limited to:
 - `location_points`
 - `rating_points`
 - `total_points`
+
+#### Clarification — R4 opportunity payment_method (2026-09-11) — LOCKED
+
+R4 adds exactly one field to `public.list_my_job_opportunities()`:
+
+- `payment_method` — the Job posting-time intent: `cod`, `qrph`, or `NULL` for legacy Jobs
+
+The eleven fields listed above remain. The RPC still does not expose exact address,
+Client identity or contact data, other Worker identities, competitor scores, candidate
+counts, or rank. Matching and the 50/30/20 score are unchanged; payment is not a
+scoring factor. Changing `RETURNS TABLE` required DROP/CREATE of this function; owner,
+`STABLE`, `SECURITY DEFINER`, empty `search_path`, comment, and authenticated-only
+EXECUTE are preserved. `private.compute_job_matches` and `private.location_points` are
+not modified.
 
 The Worker opportunity surface does not expose Client identity or contact
 information, other Worker identities, competitor scores, candidate counts, or the
@@ -893,6 +930,22 @@ Update, Socket.IO, Realtime chat, no-show automation and automatic rematching.
 `PM-01A` DB trusted boundary and the `qrph` CHECK amendment — `PM-01B` QR Ph initiation
 Edge Function — `PM-01C` webhook and reconciliation boundary — `PM-01D` native QR Ph UI
 — `PM-01E` hosted and native PayMongo test-mode closure.
+
+#### Clarification — R4 posting-time intent vs Booking claimed state (2026-09-11) — LOCKED
+
+R4 does not change payment sequencing: completion still happens before any Booking
+payment-column write, and Job posting still makes **zero** provider calls.
+
+- `job_postings.payment_method` = posting-time intent (`cod` | `qrph` | legacy `NULL`)
+- `bookings.payment_method` = claimed / processing state
+- `public.accept_job_opportunity` still creates `(NULL, pending, NULL)` and does not
+  copy Job intent
+- FRESH QR Ph remains `(NULL, pending, NULL)` until atomic claim/bind to
+  `(qrph, pending, provider_ref)`. `(qrph, pending, NULL)` stays illegal
+- Non-NULL Job intent is enforced by `select_my_booking_cod`, `prepare_booking_qrph`,
+  and `claim_and_bind_booking_qrph`. A `cod` Job cannot claim QR Ph; a `qrph` Job
+  cannot claim COD. Legacy `NULL` Jobs keep the QR-10 dual choice
+- R4B method switching / agreement after Booking creation is not implemented here
 
 #### Clarification — Messaging Send Boundary (2026-09-05) — LOCKED, IMPLEMENTED (BL-01C)
 D-003 already locks that messaging is Booking-scoped. This fixes the remaining question
