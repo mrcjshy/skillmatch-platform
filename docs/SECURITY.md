@@ -1040,10 +1040,39 @@ ERD impact is none.
 
 ### R4 Job posting-time payment intent — 2026-09-11
 
-Source-only at this record. The contract lives in
-`supabase/migrations/20260911120000_r4_db_01_job_payment_intent.sql` and the 2026-09-11
-R4 clarifications in `docs/DECISIONS.md`. This section does not claim hosted apply,
-hosted RLS-matrix pass, or runtime proof.
+**Status: R4-DB — DEPLOYED AND HOSTED-VERIFIED / CLOSED.** R4 native/mobile
+implementation is NOT yet complete and is not claimed here. R4B remains
+separate and not implemented. The contract lives in
+`supabase/migrations/20260911120000_r4_db_01_job_payment_intent.sql` and the
+2026-09-11 R4 clarifications in `docs/DECISIONS.md`.
+
+**Source / Git.** R4-DB is committed and synchronized on
+`ea2b33764c14955bab3e946d1d5b0b40d76907f4` (`feat: add job payment intent`).
+
+**Local behavioral verification.** Local Supabase/Postgres runtime verification
+passed 28/28 required behavioral cases, plus required budget-edge and
+compatibility cases. That local matrix proved new `cod` / `qrph` Job intent,
+the QR Ph minimum payable budget, payment-method immutability, Worker
+opportunity projection, acceptance retaining `(NULL, pending, NULL)`, Cash/QR
+intent enforcement, legacy NULL compatibility, unchanged matching/scoring, and
+provider isolation. The 28-case matrix was executed **locally**, not hosted.
+
+**Hosted verification.** Migration
+`20260911120000_r4_db_01_job_payment_intent.sql` is deployed on hosted project
+`uzbntxxwayqfkusyhodl`. Hosted evidence is non-destructive: migration apply
+plus catalog, function-definition, ACL, and retained-data/census inspection.
+It proved the R4 version present; application table count remains 12;
+`job_postings.payment_method` exists, is nullable, and has no default; both
+the `cod|qrph` CHECK and the QR Ph budget CHECK are present and validated; the
+immutability trigger/function is present; `list_my_job_opportunities()` has
+the 12-column R4 shape with the intended RPC ACL; Cash/QR trusted-function
+definitions contain Job-intent enforcement; `accept_job_opportunity()` and
+the matching functions remain unchanged; all 7 retained pre-R4 Jobs remain
+`payment_method IS NULL`; and the retained business census and Booking
+payment tuples are unchanged. No hosted business-data mutation outside the
+migration, no Auth mutation, and no Edge deployment. This section does **not**
+claim a hosted 28/28 pass, a hosted RLS-matrix pass, or full hosted runtime
+proof.
 
 **Column.** `public.job_postings.payment_method` is `varchar(20)`, **NULLABLE, no
 DEFAULT**. Allowed values `cod` | `qrph`. NULL is legacy compatibility only and is not
