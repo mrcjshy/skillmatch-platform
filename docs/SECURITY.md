@@ -1114,6 +1114,76 @@ provider calls.
 
 **R4B.** Post-Booking payment-method switching / agreement is not implemented.
 
+### R5 private Broadcast freshness transport — 2026-09-12
+
+**Status: R5-DB — SOURCE + LOCAL VERIFICATION ONLY.** Native R5, hosted apply,
+and hosted Realtime-settings changes are **not** done and are **not** claimed
+here. This section does not say deployed, hosted verified, or production proven.
+The BL-01C / N12 / PM-01 historical statements that Realtime was deferred remain
+true for that time; R5 is the later narrow exception locked in
+`docs/DECISIONS.md`.
+
+The contract lives in
+`supabase/migrations/20260912110000_r5_db_01_private_broadcast.sql` and the
+2026-09-12 R5 lock in `docs/DECISIONS.md`.
+
+**Architecture.** Private Supabase Broadcast is freshness / invalidation
+transport only. Authoritative state remains `public.messages`,
+`public.notifications`, `public.bookings`, existing RPCs, existing RLS, and
+the N12 trusted notification writers. Clients re-read those surfaces. Broadcast
+payloads are not a second business-data authority.
+
+**Receive-only clients.** Two `FOR SELECT TO authenticated` policies exist on
+`realtime.messages`. No authenticated `realtime.messages` INSERT policy is
+added. Chat send remains `public.messages` INSERT. Notification creation
+remains `private.emit_notification` and its existing DEFINER callers.
+
+**Topics.** `booking:<booking_uuid>:messages` authorizes only a confirmed
+Booking Worker or Client, using
+`realtime.topic() = 'booking:' || b.id::text || ':messages'` (no topic-text
+UUID cast). `user:<auth_uid>:notifications` requires
+`realtime.topic() = 'user:' || auth.uid()::text || ':notifications'`.
+Both require `extension = 'broadcast'`.
+
+**Database-triggered events.** `AFTER INSERT` on `public.messages` emits
+`message_inserted` `{booking_id, message_id}`. `AFTER INSERT` on
+`public.notifications` emits `notification_inserted` `{notification_id}`.
+`AFTER UPDATE OF status` on `public.bookings` when status leaves `confirmed`
+emits `booking_status_changed` `{booking_id}` on the same booking topic.
+`realtime.send(..., true)` runs in the same transaction as the business write.
+No message body, contact, address, profile, provider reference, QR, or payment
+secret is included. `realtime.broadcast_changes` is not used.
+
+**Trigger functions.** `private.r5_broadcast_message_inserted()`,
+`private.r5_broadcast_notification_inserted()`, and
+`private.r5_broadcast_booking_status_changed()` are postgres-owned
+`SECURITY DEFINER` `SET search_path = ''` trigger-only functions. EXECUTE is
+revoked from PUBLIC / `anon` / `authenticated` / `service_role`. No public RPC
+is added.
+
+**Publication and schema.** `public.messages`, `public.notifications`, and
+`public.bookings` are not added to `supabase_realtime`. No Postgres Changes.
+Application table count remains **12**. No new application table, column, or
+public RLS policy.
+
+**Realtime dashboard setting.** This piece does not change hosted or retained
+local "Allow public access". That setting remains separately gated. Unknown
+hosted dashboard state is not treated as confirmed here.
+
+**R5B.** Android OS push / `expo-notifications` / FCM remains separate and is
+not started by R5-DB.
+
+**Local verification.** A clean local `db reset` applied 20 migrations with
+`20260912110000` last. A 39-case local matrix proved catalog shape, confirmed
+Worker/Client booking-topic allow, unrelated/wrong-booking/terminal/malformed/
+anonymous deny, own-user notification allow, cross-user and anonymous
+notification deny, no client Broadcast INSERT, intended emit payloads,
+no event on confirmed-preserving Booking UPDATE, rollback of business write
+plus Broadcast row, and unchanged message/notification/completion contracts.
+That matrix is **LOCAL only**.
+
+**Hosted.** The hosted project has **not** received this migration.
+
 ### R3 user reports security boundary — 2026-09-10
 
 Source-only at this record. The contract lives in
