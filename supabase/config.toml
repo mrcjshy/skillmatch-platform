@@ -417,6 +417,12 @@ verify_jwt = true
 [functions.skillmatch-ai]
 verify_jwt = true
 
+# R5B: async OS-push dispatch. verify_jwt is FALSE because the caller is
+# pg_net, which holds no user JWT. The dedicated webhook secret header
+# is the authentication boundary. Hosted deploy/secrets are a later gate.
+[functions.push-notification]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
