@@ -1007,6 +1007,124 @@ Live rule:
 `no_show` remains producerless. This amendment does not add a no-show producer and does
 not change R3 reporting rules.
 
+#### R5 — Private Supabase Broadcast for in-app freshness (2026-09-12) — LOCKED
+
+Josh-approved architecture lock from the accepted R5 private Broadcast preflight
+(`READY — R5 PRIVATE BROADCAST PREFLIGHT PASSED`). This entry authorizes **no** SQL,
+native source, hosted apply, Realtime-setting change, Auth mutation, Edge deploy, or
+EAS. Those remain separately gated.
+
+**Historical deferment preserved.** The BL-01C, N12, and PM-01 statements that Realtime
+was deferred were true when written and remain historically correct. R5 is a later,
+explicitly approved **narrow exception** for in-app freshness only. It does not rewrite
+those entries as though Realtime was always allowed, and it does not reopen PM-01
+payment Realtime, Socket.IO, or any other deferred item those entries named.
+
+**Purpose.** Private Supabase Broadcast is a freshness / invalidation signal only. It
+is not a new source of business truth. Authoritative state remains `public.messages`,
+`public.notifications`, `public.bookings`, and the existing RPCs / RLS / trusted
+functions. On Broadcast, native clients re-read that authoritative database state.
+They do not append or trust Broadcast payloads as authoritative rows. Duplicate or
+replayed events reduce to harmless extra authoritative reads.
+
+**Approved source.** Database-triggered private Broadcast. Rejected for R5:
+client-originated Broadcast, Postgres Changes, polling timers, Socket.IO, custom
+WebSocket infrastructure, and Presence. The existing business write stays
+authoritative; the event only signals that state changed; there is no second client
+write path; business tables are not added to a Realtime publication; and no extra
+Realtime library or transport stack is introduced.
+
+**Message topic (private only):** `booking:<booking_uuid>:messages` where
+`<booking_uuid>` is the canonical Booking UUID. Authorization requires an authenticated
+user, `extension = broadcast`, an exact valid booking topic format, the caller as that
+Booking's Worker or Client, and Booking status `confirmed`. This follows the current
+hosted `public.messages` SELECT/INSERT boundary. Terminal message-history access is
+not reintroduced.
+
+**Notification topic (private only):** `user:<auth_uid>:notifications`. Authorization
+requires the topic's user UUID to equal `auth.uid()`. No cross-user subscription. No
+client-provided user id is treated as authority.
+
+**Approved events:** `message_inserted`, `notification_inserted`, and
+`booking_status_changed`. The lifecycle event uses the same
+`booking:<booking_uuid>:messages` topic — not a third topic family. Its only purpose
+is to make an already-open chat re-read Booking status when another actor moves the
+Booking out of `confirmed`.
+
+**Approved payloads.** `message_inserted` = `{booking_id, message_id}`.
+`notification_inserted` = `{notification_id}`. `booking_status_changed` =
+`{booking_id}`. No payload may include message body, Client/Worker contact data,
+phone, email, exact Job address, Worker profile data, payment provider reference, QR
+data, or payment secrets. Native re-reads the persistent row instead.
+
+**Receive-only clients.** R5 clients receive Broadcast events only. There is no
+authenticated R5 `realtime.messages` INSERT policy. Message creation remains
+`public.messages` INSERT under its existing hardened RLS. Notification creation
+remains the N12 trusted-writer model (`private.emit_notification` and the existing
+DEFINER callers). Realtime is not a second message-send or notification-write path.
+
+**Planned R5-DB trigger model (implementation remains a later gate; no SQL here):**
+`AFTER INSERT` on `public.messages` → `message_inserted`; `AFTER INSERT` on
+`public.notifications` → `notification_inserted`; `AFTER UPDATE OF status` on
+`public.bookings` when status leaves `confirmed` → `booking_status_changed`. These
+are transport signals only. Broadcast failure must not open a new client-side
+business mutation path.
+
+**Confirmed-only live chat.** R5 does not change the R3B message privacy boundary:
+ordinary `public.messages` SELECT and INSERT remain confirmed Booking participants
+only (INSERT still also requires `sender_id = auth.uid()`, nonblank content, and
+length ≤ 2000). Private Booking Broadcast subscription is therefore also
+confirmed-only. When the Booking leaves `confirmed`, `booking_status_changed` causes
+an authoritative `load()` and the composer closes / chat becomes unavailable under
+the current contract. Terminal message history is not available to ordinary
+participants.
+
+**Chat listener scope.** A private booking channel is active while one confirmed
+Booking chat screen is mounted. On `message_inserted`, `booking_status_changed`, or
+`SUBSCRIBED` / reconnect, native performs an authoritative re-read. On unmount or
+`bookingId` change, native removes the channel. Manual pull-to-refresh remains the
+fallback. No timer polling.
+
+**Notification listener scope.** A private user channel is active while the
+Notifications inbox is mounted and is removed on unmount. R5 does not introduce an
+app-global permanent notification listener, a background native service, or Android
+OS push. The existing notification bell remains navigation-only. `notification_inserted`
+makes **existing trusted SkillMatch notifications** appear live in the inbox; it does
+not create a notification for every chat message. Message-to-notification fan-out
+remains deferred.
+
+**Auth / JWT.** The current `@supabase/supabase-js` client already forwards refreshed
+Auth tokens to Realtime. R5 does not add speculative custom
+`supabase.realtime.setAuth(...)` plumbing. Native subscribes only after an
+authenticated session/account is resolved. If later runtime evidence disproves this
+assumption, that requires a new gate.
+
+**Publication and schema.** R5 does not add `public.messages` or
+`public.notifications` to the `supabase_realtime` publication and does not use
+Postgres Changes. Application table count remains **12**. No new application table,
+column, or public RPC. D-001 is unchanged. No GAP-005. No D-010.
+
+**Realtime "Allow public access".** The current hosted dashboard value is **not
+confirmed**. Do not claim it is enabled or disabled. R5 clients must use
+`config: { private: true }` regardless. Recommendation, for a later separately
+authorized hosted-settings gate only: disable Allow public access. That settings
+mutation is not part of R5 source implementation unless Josh separately authorizes
+it. Unknown current dashboard state is not an R5 blocker.
+
+**Still deferred by R5:** `messages.is_read` maintenance, message read receipts,
+typing indicators, Presence, attachments, message edit/delete/recall,
+message-to-notification fan-out, app-global notification listener, Android OS push,
+FCM, payment Realtime, and R4B payment switching.
+
+**R5 versus R5B.** R5 is in-app private Supabase Broadcast freshness. R5B is Android
+OS push (`expo-notifications` / FCM) and remains entirely separate. R5 does not
+start R5B and authorizes no EAS work.
+
+**Unchanged locks.** Native-primary architecture, one Expo Worker/Client/Admin app,
+landing-only React/Vite web, matching factors and scoring, acceptance semantics,
+payment architecture, AI architecture, Reports, R3B terminal privacy, and the
+12-table application schema are untouched.
+
 ### D-004 — AI feature boundaries (2026-08-20) — LOCKED
 Skill gap: canonical result is a rule-based set difference — AI does not determine the
 gap; AI may convert the computed result into simple Taglish guidance, on-demand; no
