@@ -1256,6 +1256,32 @@ make a sixth metadata row impossible. No count trigger is added.
 `image_url`. Parent delete cascades image metadata rows. Storage objects are not
 created or authorized here.
 
+### R5D-IMG-B2 private portfolio Storage — 2026-09-14
+
+Hosted apply of this migration is recorded. The contract lives in
+`supabase/migrations/20260914130000_r5d_img_b2_portfolio_storage.sql`. Hosted Storage
+after apply is the private `portfolio` bucket and **0 objects**. This section does
+not claim Storage API binary upload, download, signed URLs, mobile image
+picker/runtime, or Client image viewing.
+
+**Bucket.** `storage.buckets` row `id = name = 'portfolio'` is private
+(`public = false`). `file_size_limit = 5242880` (5 MiB). `allowed_mime_types` is
+exactly `image/jpeg`, `image/png`, `image/webp`. No GIF, HEIC/HEIF, video, or
+document types.
+
+**Object policies.** `storage.objects` policies are `TO authenticated` only and
+require `bucket_id = 'portfolio'`. Worker SELECT / INSERT / DELETE resolve
+ownership as `auth.uid()` → `worker_profiles.user_id` → `worker_profiles.id` →
+`portfolio_items.worker_id`, compared as text to the first two folders of
+`storage.foldername(name)`. Exact folder depth is two
+(`worker_profile_id / portfolio_item_id / filename`). Path segments are never
+cast to uuid. `users.id` is never the first folder. There is no UPDATE policy.
+Client object SELECT is not granted. There is no Admin special write. `anon` and
+`PUBLIC` have no portfolio object policy.
+
+**B1 metadata table.** This migration does not alter `public.portfolio_item_images`
+or `public.portfolio_items`.
+
 ### Still deferred after BL-01A
 
 No-show operational path, `strike_count` mutation, automatic third-strike suspension,
