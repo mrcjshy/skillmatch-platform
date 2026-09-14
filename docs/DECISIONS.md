@@ -89,6 +89,41 @@ claimed / processing payment state. Worker acceptance does **not** copy Job inte
 the Booking. Trusted payment RPCs enforce a non-NULL Job intent; legacy NULL Jobs retain
 the old post-completion dual choice.
 
+#### Amendment — `public.portfolio_item_images` as 13th application table (2026-09-14) — LOCKED
+
+Josh-approved R5D-IMG-B1 contract. `public.portfolio_item_images` is now an approved
+13th application table.
+
+Reason: each portfolio item may attach 0..5 optional images. Image metadata is a child
+of `public.portfolio_items`. Cover image is `position = 1`.
+
+This amendment does not automatically classify ERD / DFD / manuscript content as
+requiring immediate revision.
+
+Locked B1 contract:
+
+- Columns: `id`, `portfolio_item_id` (FK to `portfolio_items.id` ON DELETE CASCADE),
+  `storage_path`, `position`, `created_at`.
+- Max 5 is database-authoritative via `CHECK (position BETWEEN 1 AND 5)` plus
+  `UNIQUE (portfolio_item_id, position)`. No count trigger.
+- `storage_path` is globally unique. It is not an ownership predicate.
+- Worker ownership is `auth.uid()` → `worker_profiles.user_id` → `worker_profiles.id`
+  → `portfolio_items.worker_id`. `users.id` is never written or compared as
+  `portfolio_items.worker_id`.
+- Direct grants: authenticated SELECT / INSERT / DELETE only. No UPDATE grant or
+  UPDATE policy. No Client image SELECT. No Admin special write.
+- `portfolio_items.image_url` remains in place and unused. It is not dropped and is
+  not written by this feature.
+- Supabase Storage buckets and objects are infrastructure and do not count as
+  application tables. Bucket creation is a later B2 gate.
+
+Earlier D-001 notes that said the count remained 12, or that no 13th table was added,
+are retained for append-only provenance and are superseded by this amendment for
+application-table count.
+
+Effective status of D-001 from this amendment onward: LOCKED as amended.
+Application-table count is **13**.
+
 ### D-002 — Two-stage matching (2026-08-20) — LOCKED
 Stage 1 eligibility filter: matching required skill, worker availability, account
 active / not suspended. Stage 2 weighted ranking: 40 skill / 30 location /

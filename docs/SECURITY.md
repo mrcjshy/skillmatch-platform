@@ -1233,6 +1233,29 @@ nothing else.
 **Notifications unchanged.** R3 does not modify `notifications_type_check` and does not
 emit report notification types.
 
+### R5D-IMG-B1 portfolio image metadata — 2026-09-14
+
+Source-only at this record until a later hosted-apply gate. The contract lives in
+`supabase/migrations/20260914120000_r5d_img_b1_portfolio_item_images.sql` and the
+D-001 amendment in `docs/DECISIONS.md`. This section does not claim hosted apply.
+
+**Table and direct access.** `public.portfolio_item_images` has RLS enabled. `PUBLIC`
+and `anon` are revoked entirely. `authenticated` holds **SELECT, INSERT, and DELETE**
+only. There is no UPDATE grant and no UPDATE policy. Client image SELECT is not
+granted. There is no Admin table-wide write path.
+
+**Worker-owned policies.** SELECT / INSERT / DELETE are `TO authenticated` and resolve
+ownership as `auth.uid()` → `worker_profiles.user_id` → `worker_profiles.id` →
+`portfolio_items.worker_id`. INSERT uses `WITH CHECK`. Policies do not compare
+`portfolio_items.worker_id` to `auth.uid()` and do not authorize from `storage_path`.
+
+**Max 5.** `CHECK (position BETWEEN 1 AND 5)` plus `UNIQUE (portfolio_item_id, position)`
+make a sixth metadata row impossible. No count trigger is added.
+
+**Parent row.** This migration does not alter `public.portfolio_items`, including
+`image_url`. Parent delete cascades image metadata rows. Storage objects are not
+created or authorized here.
+
 ### Still deferred after BL-01A
 
 No-show operational path, `strike_count` mutation, automatic third-strike suspension,
