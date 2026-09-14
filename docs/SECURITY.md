@@ -1282,6 +1282,43 @@ Client object SELECT is not granted. There is no Admin special write. `anon` and
 **B1 metadata table.** This migration does not alter `public.portfolio_item_images`
 or `public.portfolio_items`.
 
+### R5D-CLIENT-B1 confirmed-booking Client portfolio read — 2026-09-14
+
+Source-only at this record until a later hosted-apply gate. The contract lives in
+`supabase/migrations/20260914200000_r5d_client_portfolio_read.sql` and the
+D-001 amendment in `docs/DECISIONS.md`. This section does not claim hosted apply,
+Storage HTTP signed-URL runtime, or mobile Client UI.
+
+**Worker.** Own-row portfolio read/write is unchanged: `Workers can manage their own
+portfolio` on `public.portfolio_items`; Worker SELECT / INSERT / DELETE on
+`public.portfolio_item_images`; Worker SELECT / INSERT / DELETE on `storage.objects`
+for canonical two-folder portfolio paths. Workers cannot read another Worker's
+portfolio text after the residual authenticated-wide SELECT was removed.
+
+**Client.** Read-only. An active authenticated Client (`private.is_active_client()`)
+may SELECT portfolio content for the assigned Worker only while a Booking exists
+such that `bookings.client_id = auth.uid()`, `bookings.worker_id =
+worker_profiles.user_id`, `bookings.status = 'confirmed'`, and
+`portfolio_items.worker_id = worker_profiles.id`. The same predicate authorizes
+`portfolio_item_images` through the parent item. No Client INSERT / UPDATE / DELETE.
+No portfolio access from `pending`, `completed`, `cancelled`, or `no_show`.
+
+**Residual removed.** Policy `Anyone authenticated can read portfolio items`
+(`FOR SELECT TO authenticated USING (true)`) is dropped. There is no remaining
+authenticated-wide SELECT path on `public.portfolio_items`.
+
+**Storage.** The `portfolio` bucket remains private (`public = false`),
+`file_size_limit = 5242880`, MIME `image/jpeg` / `image/png` / `image/webp`. Client
+object SELECT requires `bucket_id = 'portfolio'` and
+`storage.objects.name = portfolio_item_images.storage_path` for a metadata row whose
+parent item belongs to the confirmed counterpart Worker. Folder-only / prefix Client
+reads are not authorized. Path segments are not cast to uuid. Signed URLs remain
+transient client-side artifacts of object SELECT; they are not stored in Postgres.
+`getPublicUrl` is not part of this contract. No bucket update is made here.
+
+**Not added.** No public RPC, no new helper, no grant widening, no Admin portfolio
+write policy, no matching/ranking/eligibility change.
+
 ### Still deferred after BL-01A
 
 No-show operational path, `strike_count` mutation, automatic third-strike suspension,

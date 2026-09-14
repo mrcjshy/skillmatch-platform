@@ -124,6 +124,29 @@ application-table count.
 Effective status of D-001 from this amendment onward: LOCKED as amended.
 Application-table count is **13**.
 
+#### Amendment — Client confirmed-booking portfolio read (2026-09-14) — LOCKED
+
+Josh-approved R5D-CLIENT-B1 contract. Client portfolio viewing is a confirmed-booking
+counterpart feature.
+
+An active Client may read portfolio content and private portfolio images only for the
+Worker assigned to the Client's own confirmed Booking.
+
+Portfolio access is not a match-results feature and does not affect matching, ranking,
+eligibility, verification, rating, or Worker selection.
+
+Terminal/non-confirmed Booking states (`pending`, `completed`, `cancelled`, `no_show`)
+do not retain portfolio access. Worker remains the sole portfolio writer. There is no
+Client shortlist and no pre-booking portfolio visibility.
+
+The B1 locked line “No Client image SELECT” is retained for append-only provenance and
+is superseded by this amendment for confirmed-booking counterpart SELECT only. Client
+INSERT / UPDATE / DELETE on `portfolio_items`, `portfolio_item_images`, and portfolio
+Storage objects remain forbidden. No Admin special write path is added.
+
+This amendment does not change D-002 scoring (Skill 50 / Location 30 / Rating 20) or
+D-003 Worker-choice booking.
+
 ### D-002 — Two-stage matching (2026-08-20) — LOCKED
 Stage 1 eligibility filter: matching required skill, worker availability, account
 active / not suspended. Stage 2 weighted ranking: 40 skill / 30 location /
