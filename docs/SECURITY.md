@@ -998,10 +998,17 @@ migration, which replaced two Ratings policies with one.
 
 ### R3B terminal privacy and report-scoped evidence — 2026-09-11
 
-Source-only at this record. The contract lives in
+**Status: R3B — CLOSED + HOSTED PROVEN + NATIVE RUNTIME PROVEN.** The 2026-09-11
+source-only wording below is historical provenance for the contract, not current proof
+status. Hosted apply and the original hosted/native matrices closed this lane in
+previous dispatches. R3B-N1 (2026-09-15) is supplemental reconfirmation only and does
+not create new Phase 1 debt. `public.get_report_booking_messages(uuid)` is not open
+proof-debt: the historical hosted R3B matrix already covers its report-scoped
+authorization contract.
+
+The contract lives in
 `supabase/migrations/20260911100000_r3b_db_01_terminal_privacy.sql` and the 2026-09-11
-clarifications in `docs/DECISIONS.md`. This section does not claim hosted apply, hosted
-RLS-matrix pass, or runtime proof.
+clarifications in `docs/DECISIONS.md`.
 
 **N11 projection amendment.** Both participant list RPCs keep their signatures and
 return every owned Booking. Counterpart contact/profile fields and exact `job_address`
@@ -1038,10 +1045,38 @@ producerless.
 **D-001 / ERD.** No table, column, index, constraint, or trigger is added. Structural
 ERD impact is none.
 
+**Original hosted / native closure (do not rerun as a new Phase 1 gate).** Backend
+commit `7b8d5fa87207152e8e465f618877b14530ee5993` (`feat: harden terminal privacy and
+report evidence`). Mobile commit `8fea092fee4750d68301f1f32a7b73ed161d785f`
+(`feat: enforce terminal privacy in native app`). Hosted TDD matrix **36/36**. Native
+runtime matrix **22/22**. Proven: terminal participant contact suppression; exact
+`job_address` suppression with barangay/city remaining; confirmed-only ordinary
+participant message access; report-scoped Admin evidence RPC
+`public.get_report_booking_messages(uuid)`. Disposable fixtures were cleaned. Do not
+create another report fixture merely to repeat that historical Admin-evidence proof.
+
+**R3B-N1 supplemental reconfirmation — 2026-09-15.**
+`PASS — participant terminal privacy reconfirmed on retained completed Booking`.
+`SUPPLEMENTAL RECONFIRMATION — no new Phase 1 debt created`. Booking
+`227adbac-4d6a-4825-986e-2dbec2bfc174` (Job `Defense Rehearsal - Sep 9`). Worker
+historical summary: no Client name, phone, profile/contact control, exact street
+address, chat, or portfolio access. Client historical summary: no Worker name, phone,
+profile/contact/skills/verification block, exact street address, chat, or portfolio
+access. Direct chat deep links `skillmatchmobile://worker/chat?bookingId=` and
+`skillmatchmobile://client/chat?bookingId=` failed closed with
+`Chat is only available while this booking is confirmed.` No messages, composer, Send
+control, or message history. No data, Git, Storage, session, matching, or application
+mutation. Hosted counts unchanged: 4 completed bookings; reports 0; messages 3;
+notifications 14; ratings 2; portfolio items/images/objects 0. Matching fingerprints
+unchanged: `private.compute_job_matches(job_id uuid)`
+`9433844085e4e0c45c6f68f996238b3c`; `public.match_workers_for_job(p_job_id uuid)`
+`a5d50042d3bee78833c765db6b37bd7e`.
+
 ### R4 Job posting-time payment intent — 2026-09-11
 
-**Status: R4-DB — DEPLOYED AND HOSTED-VERIFIED / CLOSED.** R4 native/mobile
-implementation is NOT yet complete and is not claimed here. R4B remains
+**Status: R4 — CLOSED + HOSTED PROVEN + NATIVE RUNTIME PROVEN.** R4-DB hosted
+verification remains recorded below. R4 native/mobile later closed on hosted Android
+runtime and must not be scheduled as a new Phase 1 proof gate. R4B remains
 separate and not implemented. The contract lives in
 `supabase/migrations/20260911120000_r4_db_01_job_payment_intent.sql` and the
 2026-09-11 R4 clarifications in `docs/DECISIONS.md`.
@@ -1070,9 +1105,19 @@ definitions contain Job-intent enforcement; `accept_job_opportunity()` and
 the matching functions remain unchanged; all 7 retained pre-R4 Jobs remain
 `payment_method IS NULL`; and the retained business census and Booking
 payment tuples are unchanged. No hosted business-data mutation outside the
-migration, no Auth mutation, and no Edge deployment. This section does **not**
-claim a hosted 28/28 pass, a hosted RLS-matrix pass, or full hosted runtime
-proof.
+migration, no Auth mutation, and no Edge deployment. The 28-case matrix remains
+a **local** proof; native hosted runtime is the later R4-native record below,
+not a hosted 28/28 rerun.
+
+**R4 native hosted runtime — CLOSED.** Mobile commit
+`ad2de30a7e7c6465983079614d2811c6ac0cdd63` (`feat: add job payment intent to native
+flows`). Proven: Cash/QR Ph selection during Job posting; Worker pre-acceptance
+visibility of the method; pre-acceptance exact-address/contact privacy; no PayMongo
+provider invocation during posting; acceptance Booking stayed unsettled
+`(payment_method NULL, payment_status pending, paymongo_ref NULL)`; Cash completion
+reached the recorded paid state; QR remained control-only (Start QR Ph Payment was
+not pressed); exact disposable-Job cleanup. Do not schedule a new R4 native proof
+gate.
 
 **Column.** `public.job_postings.payment_method` is `varchar(20)`, **NULLABLE, no
 DEFAULT**. Allowed values `cod` | `qrph`. NULL is legacy compatibility only and is not
@@ -1116,9 +1161,18 @@ provider calls.
 
 ### R5 private Broadcast freshness transport — 2026-09-12
 
-**Status: R5-DB — SOURCE + LOCAL VERIFICATION ONLY.** Native R5, hosted apply,
-and hosted Realtime-settings changes are **not** done and are **not** claimed
-here. This section does not say deployed, hosted verified, or production proven.
+**Status: R5 — CLOSED / IMPLEMENTED.** The 2026-09-12 source-only wording is
+historical provenance for the contract. Backend commit
+`409f7b4b30859210ca4fc76cfea9d097513adebc` (`feat: add R5 private Broadcast
+backend`). Native commit `505c36f4c16017e5a24d7ea7055e5044e36af1a0`
+(`feat: add R5 private Broadcast freshness`). Hosted later received this
+migration with the rest of the 24-migration catalog. Notification-inbox Broadcast
+freshness is runtime proven during R5B. Exact two-device live-chat
+`message_inserted` and `booking_status_changed` delivery was not recovered as a
+standalone historical runtime closure; those two narrow behaviors are carried to
+R6 final regression only. Do not reopen the R5 implementation lane and do not
+create a new Phase 1 fixture campaign.
+
 The BL-01C / N12 / PM-01 historical statements that Realtime was deferred remain
 true for that time; R5 is the later narrow exception locked in
 `docs/DECISIONS.md`.
@@ -1170,8 +1224,8 @@ public RLS policy.
 local "Allow public access". That setting remains separately gated. Unknown
 hosted dashboard state is not treated as confirmed here.
 
-**R5B.** Android OS push / `expo-notifications` / FCM remains separate and is
-not started by R5-DB.
+**R5B.** Android OS push / `expo-notifications` / FCM is a separate closed lane.
+See “R5B Android OS push — 2026-09-13” below. R5-DB did not start R5B.
 
 **Local verification.** A clean local `db reset` applied 20 migrations with
 `20260912110000` last. A 39-case local matrix proved catalog shape, confirmed
@@ -1180,16 +1234,39 @@ anonymous deny, own-user notification allow, cross-user and anonymous
 notification deny, no client Broadcast INSERT, intended emit payloads,
 no event on confirmed-preserving Booking UPDATE, rollback of business write
 plus Broadcast row, and unchanged message/notification/completion contracts.
-That matrix is **LOCAL only**.
+That matrix is **LOCAL only** for the original R5-DB source gate. Later hosted apply
+and native implementation closed the implementation lane as recorded in the Status
+line above.
 
-**Hosted.** The hosted project has **not** received this migration.
+### R5B Android OS push — 2026-09-13
+
+**Status: R5B — CLOSED + DEVELOPMENT-APK RUNTIME PROVEN.** Do not schedule another
+R5B proof lane. Fresh R7 EAS proof remains final-build validation, not reopened R5B
+work.
+
+Backend commit `ff82394011ef90b9c7d5f93d51250cbde60f5b11` (`feat: add R5B push
+backend`). Final mobile commit `7580c57246d35d62b6390b292546eb37fe0e2cc2`
+(`feat: add Android OS push notifications`). EAS development build
+`ffb5c1ef-7919-4b55-b47e-49f3f86377ce` installed on Worker and Client AVDs. Proven:
+real Expo push tokens; foreground Android notification; background Android push;
+notification-inbox freshness; background tap routing; no duplicate persistent
+notification row; sign-out token deactivation; cold-start routing/session restoration
+correction; exact fixture cleanup. Expo Go is not valid OS-push proof.
 
 ### R3 user reports security boundary — 2026-09-10
 
-Source-only at this record. The contract lives in
+**Status: R3 — CLOSED + HOSTED PROVEN + NATIVE RUNTIME PROVEN.** The 2026-09-10
+source-only wording is historical provenance for the contract. Backend commit
+`b90e9284346d985839046218dfedf1a367b4c182` (`feat: add user reports and admin review`).
+Mobile commit `03e87bab8332d16ee00cdde2624e283c3b832997`
+(`feat: add native reporting workflows`). Hosted core database matrix **36/36**.
+Supplemental ACL matrix **5/5**. Native runtime matrix **22/22**. Proven: Worker/Client
+report submission; Admin review/status workflow (`under_review`, `resolved`,
+`dismissed`); disposable cleanup. Do not schedule a new R3 runtime gate.
+
+The contract lives in
 `supabase/migrations/20260910183000_r3_db_01_user_reports.sql` and the D-001 amendment
-in `docs/DECISIONS.md`. This section does not claim hosted apply, hosted RLS-matrix
-pass, or runtime proof.
+in `docs/DECISIONS.md`.
 
 **Table and direct access.** `public.reports` has RLS enabled. `PUBLIC` and `anon` are
 revoked entirely. `authenticated` holds **SELECT only** — no INSERT, UPDATE, or DELETE
@@ -1355,7 +1432,47 @@ pre-existing warnings.
 **Not claimed.** The reused development APK was sufficient for this feature gate but
 is not a fresh R7 EAS-build proof. This record does not claim live-payment,
 matching-change, or broader portfolio-visibility beyond the confirmed-booking
-counterpart contract.
+counterpart contract. **R5D-CLIENT remains FULLY CLOSED.** Do not change this M1
+classification.
+
+### Phase 1 closure correction — 2026-09-15
+
+**Status: Phase 1 functional/security implementation — CLOSED — implemented and proven
+to its recorded boundaries in previous dispatches.** Small final regression checks do
+not reopen Phase 1.
+
+**PROOF-RECON-01 — CLOSED WITH CORRECTIONS.** Its initial 2026-09-15 output
+incorrectly reopened completed gates because earlier runtime and hosted closure
+records were not fully recovered. PROOF-RECON-01 is not the current active gate.
+
+**Current gate: MATCH-DECISION-01.** Resolve the new-Worker cold-start rating conflict
+(10/20 versus 12/20). No matching mutation without an explicit authoritative
+resolution. Next functional lane: R5E Pin Location / Static Map / authorized active
+location.
+
+**R1-C session persistence — CLOSED at the recorded Expo Go/AVD proof boundary.**
+Prior proof included JavaScript reload, background/foreground, Expo Go process
+restart, AVD reboot, session restoration without credentials, and correct
+Worker/Client role restoration. A generic standalone-APK persistence recheck may
+remain inside R7 final regression. It must not reopen R1-C.
+
+**R2 Forgot Password — CLOSED + PUSHED + RUNTIME PROVEN.** Mobile commit
+`f1dae1a98e804be7a05e9588d461c114d7c2ef33` (`feat: add native password recovery`).
+Proven: recovery link / deep link `skillmatchmobile://update-password`; Update
+Password form; password update; new-password login; fail-closed invalid/expired
+recovery handling (`This recovery link is invalid or expired.`); generic
+account-existence copy; fixture cleanup; EAS preview APK proof. Do not schedule a
+new R2 fixture gate.
+
+**Carried to R6/R7, not reopened Phase 1 lanes:** exact R5 two-device live-chat /
+`booking_status_changed` Broadcast coverage; standalone installed-APK session
+persistence; AI-02 installed-APK PDF share sheet; AI-SVC-01 authorized nonzero-gap
+provider call; Worker portfolio max-five / multi-image gallery behavior.
+
+R5F OTP Authentication remains not active / not authorized. R5G Booking Confirmation
+Email remains flagged out. R5H Budget Negotiation remains not active / not
+authorized. R5I core Reports remain implemented; only integrated regression / UX
+polish remains.
 
 ### Still deferred after BL-01A
 
