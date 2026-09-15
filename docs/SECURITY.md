@@ -1471,10 +1471,116 @@ because Supabase MCP required authentication. Previously recorded fingerprints:
 `private.compute_job_matches(uuid)` `9433844085e4e0c45c6f68f996238b3c`;
 `public.match_workers_for_job(uuid)` `a5d50042d3bee78833c765db6b37bd7e`.
 
-**Current gate: R5E-PREFLIGHT-01.** Read-only discovery of existing location/map
-code, schema, decisions, dependencies, and privacy boundaries. Produce a written
-R5E implementation contract before mutation. Next functional lane: R5E Pin
-Location / Static Map / authorized active location.
+### R5E-D1 — Job pin / static map product and security contract — 2026-09-15
+
+**Status: R5E-D1 — CLOSED as documentation lock.** Canonical product, privacy, schema
+authorization, matching non-impact, Expo direction, TDD seams, and review workflow are
+recorded here and in `docs/DECISIONS.md`. This gate implemented no application source,
+migrations, packages, Expo configuration, or hosted mutation. This final decision
+supersedes the earlier temporary selection that included live Worker tracking.
+
+**R5E-PREFLIGHT-01 — CLOSED.** Read-only discovery identified existing text
+address/barangay/city behavior and the absence of pins, coordinates, maps, navigation
+handoff, device-location permissions, and active Worker location. Existing address
+fields are not R5E.
+
+**Current gate: R5E-DB1.** Private Job coordinate contract; atomic Job/skills/location
+creation; close exact-address/coordinate read exposure; confirmed-participant exact-pin
+RPC; terminal/nonparticipant denial; matching fingerprints unchanged.
+
+**Next:** R5E-M1 Client pin picker → R5E-M2 Worker approximate/exact static map +
+`Open in Maps` → R5E-N1 hosted/native privacy proof → remaining V2 UX → R6 → R7 →
+System Checking.
+
+**Locked Client flow.** Interactive map centered on the approved Santa Ana, Pateros
+service area. `Use Current Location` requests **foreground** device-location permission
+only after the Client invokes that action. Granted: center and place the editable Job
+pin at the current device position; the Client may still drag/tap a different pin.
+Denied or unavailable: manual pin placement remains; posting must not crash; do not
+repeatedly force the prompt. Manual address/house/street/landmark remains required.
+Fixed `barangay = Santa Ana` and `city = Pateros` remain. Save only the final selected
+Job pin. Do not retain the Client current-location reading separately. Owner may edit
+address and pin only while the Job is open/unaccepted. After acceptance/confirmation
+the address and pin are immutable. Legacy Jobs without coordinates keep the text-only
+fallback.
+
+**Locked Worker before acceptance.** Approximate non-interactive area map plus
+barangay, city, and existing authorized opportunity fields. No exact latitude/longitude,
+exact pin, house/street address, residence-identifying landmark, Client contact, or
+`Open in Maps`. The approximate marker is **not** a jitter or rounding of the exact pin.
+Use only the approved general area associated with barangay/city (current deployment:
+general Santa Ana, Pateros). Do not invent an official barangay polygon or centroid
+without verified source data. Copy: `Approximate Job area. Exact location becomes
+available after acceptance.` Exact Santa Ana display center/bounds are an R5E-M1
+preflight verification item.
+
+**Locked Worker after acceptance.** Assigned Worker on a `confirmed` Booking only:
+exact saved Job pin; non-interactive in-app map; manual house/street/landmark;
+barangay; city; `Open in Maps` to the installed navigation app with the **fixed Job
+destination**. SkillMatch does not publish or collect the Worker’s location.
+
+**Locked terminal / Client visibility.** `completed`, `cancelled`, and any other
+terminal status: no exact coordinates, no exact map, no `Open in Maps`, R3B exact
+address/landmark suppression, barangay/city history only. Direct deep links fail
+closed. Owning Client may view the exact pin while editing an open/unaccepted Job and
+while the Booking is confirmed. Terminal Client surfaces must not re-expose the pin.
+
+**NOT AUTHORIZED / REMOVED FROM R5E:** live Worker location; active Worker tracking;
+foreground or background Worker tracking; continuous Client tracking; movement
+history; Worker-location Realtime/Broadcast; Worker-location tables or RPCs; location
+update timers; foreground tracking services; background-location permission; Client
+watching Worker movement; Admin live-location map. `R5E-ACTIVE-*` is removed from the
+active roadmap. No Worker device-location permission is required.
+
+**Expo direction (do not install during R5E-D1).** `react-native-maps` for the
+interactive Client picker and for Worker “static map” as the same native map with
+interaction disabled. Client `expo-location` foreground-only for `Use Current Location`.
+Existing `expo-linking` for `Open in Maps`. Do not use Google Static Maps HTTP URLs
+containing precise coordinates. Do not use `expo-maps` (alpha; unavailable in Expo Go
+under inspected SDK 57 docs). Authenticate remote Expo MCP and re-check SDK 57
+install/config requirements before the first mobile mutation. Maps native
+configuration requires a fresh development APK; the reused R5D APK cannot prove R5E.
+Restrict Google Maps Android credentials to the SkillMatch Android package and
+authorized SHA-1. Do not commit an unrestricted API key. Do not enable
+`isAndroidBackgroundLocationEnabled`, `ACCESS_BACKGROUND_LOCATION`, or background
+location tasks. Expo tooling is advisory and cannot override this contract.
+
+**D-001 / D-002.** Precise coordinates live in authorized `private.job_locations`, not
+on `public.job_postings`. Public application-table count remains 13. Matching stays
+Skill 50 / Location 30 / Rating 20 on existing barangay/city rules only.
+
+**Mandatory R5E-DB1 security dependency.** The existing authenticated-wide
+`job_postings` SELECT must not expose `job_postings.address` or any precise coordinate
+data to unassigned Workers. Inventory every direct `job_postings` reader and replace
+or narrow unsafe reads before precise coordinates are deployed. Not solved in R5E-D1.
+
+**Authorized TDD seams (no tests in this gate).** Backend: atomic Job + skills +
+coordinates creation; owning Client open-Job read/update; unassigned Worker
+exact-coordinate denial; opportunity RPC contains no exact coordinates/address;
+confirmed assigned Worker allow; confirmed owning Client allow; nonparticipant denial;
+completed/cancelled denial; malformed/out-of-range/nonfinite coordinate rejection;
+matching-function fingerprints unchanged; legacy coordinate-null Job compatibility.
+Mobile pure functions: coordinate validation; permission-result mapping;
+approximate-versus-exact lifecycle projection; general-area map-region mapping;
+external navigation URL construction; text-location fallback; map-unavailable
+fail-closed state. Mock only system boundaries (`expo-location`, map component
+boundary, `Linking.openURL`). Do not mock internal business logic.
+
+**Code review.** After substantive implementation and before staging:
+
+```
+preflight and confirmed seam
+→ Matt Pocock TDD
+→ tests/static checks
+→ Matt Pocock Standards review
+→ Matt Pocock Spec review
+→ runtime/privacy proof
+→ stage/commit
+→ push
+```
+
+R5E-DB1 security/RLS review is sequential. Mobile-only Standards and Spec may run in
+parallel only when the diff has no SQL/security surface.
 
 **R1-C session persistence — CLOSED at the recorded Expo Go/AVD proof boundary.**
 Prior proof included JavaScript reload, background/foreground, Expo Go process

@@ -147,6 +147,158 @@ Storage objects remain forbidden. No Admin special write path is added.
 This amendment does not change D-002 scoring (Skill 50 / Location 30 / Rating 20) or
 D-003 Worker-choice booking.
 
+#### Amendment — `private.job_locations` Job-pin contract (2026-09-15) — LOCKED
+
+Josh-approved R5E-D1 contract. Precise Job coordinates must not be stored as columns on
+the broadly readable `public.job_postings` row. R5E-DB1 is authorized to create
+`private.job_locations` as a private one-to-one Job-location record.
+
+Preferred shape for R5E-DB1 design (exact SQL and public function names remain for
+that implementation review):
+
+```
+private.job_locations
+├─ job_id UUID PRIMARY KEY
+├─ latitude DOUBLE PRECISION NOT NULL
+├─ longitude DOUBLE PRECISION NOT NULL
+├─ created_at TIMESTAMPTZ
+└─ updated_at TIMESTAMPTZ
+```
+
+Required constraints:
+
+- `job_id` references `public.job_postings(id)` with cascade cleanup
+- latitude finite and between `-90` and `90`
+- longitude finite and between `-180` and `180`
+- no direct `anon` or `authenticated` table access
+- no location history; one current fixed Job pin per Job
+- no Worker-location record
+- no PostGIS or distance-scoring requirement
+- no public coordinate view
+
+This is a **private-schema** object, not a 14th public application table. D-001 public
+application-table count remains **13**. Storage buckets remain infrastructure and do
+not count. Exact function names, grants, and RLS/RPC design are R5E-DB1 work.
+
+Public contract the later RPCs must provide:
+
+1. Atomic Job creation with Job, required skills, manual address, and selected
+   coordinates
+2. Owner-only update while the Job is open/unaccepted
+3. Owner-only read for open/unaccepted Job editing
+4. Confirmed-Booking coordinate read for the owning Client and the assigned Worker
+5. Terminal and nonparticipant denial
+6. No precise coordinate output in `list_my_job_opportunities`
+7. No client-supplied counterpart identity as authorization
+8. Explicit `auth.uid()` and active-account checks
+9. Revoked default `PUBLIC` execution
+10. Narrow `authenticated` execution only on intended public RPCs
+
+R5E-DB1 must also inventory every direct `job_postings` reader and replace or narrow
+unsafe reads before precise coordinates are deployed. The existing authenticated-wide
+`job_postings` SELECT must not expose `job_postings.address` or any precise coordinate
+data to unassigned Workers. That exposure is a mandatory R5E-DB1 security dependency;
+it is not solved by this documentation lock.
+
+This amendment does not change D-002 scoring (Skill 50 / Location 30 / Rating 20) or
+D-003 Worker-choice booking. It does not authorize live Worker location.
+
+#### Clarification — R5E Job-pin product and privacy contract (2026-09-15) — LOCKED
+
+Josh-approved R5E-D1 product lock. This supersedes the earlier temporary selection that
+included live Worker tracking. Address, barangay, and city already existing does **not**
+mean R5E is implemented.
+
+**Client Job-location flow.** During Job posting, show an interactive map centered on
+the approved Santa Ana, Pateros service area. Provide `Use Current Location`. Request
+foreground device-location permission only after the Client invokes that action. If
+granted: center the map on the Client’s current device position and place the editable
+Job pin there. The Client may drag/tap the map to choose a different Job location. If
+permission is denied or unavailable: manual pin placement remains available; Job
+posting must not crash; do not repeatedly force the permission prompt. Manual
+address/house/street/landmark remains required. Existing fixed `barangay = Santa Ana`
+and `city = Pateros` remain. Save only the final selected Job pin. Do not retain the
+Client’s current-location reading separately. The Client may edit the manual address
+and pin only while the Job remains open/unaccepted. Once accepted/confirmed, the Job
+address and pin become immutable. Legacy Jobs without coordinates remain supported
+with their current text-only fallback.
+
+**Worker before acceptance.** Eligible Workers may see an approximate non-interactive
+area map, barangay, city, and the existing authorized Job details (title, description,
+schedule, budget, required skills, payment method, match information). They must not
+receive exact saved latitude/longitude, the exact pin, house/street address, a precise
+landmark that identifies the residence, Client phone/contact details, or navigation
+handoff to the exact destination. The approximate map must not be a jittered or
+rounded transformation of the exact pin. Use a separately approved general-area
+display region derived from `barangay + city`. For the current deployment this is the
+general Santa Ana, Pateros area. Do not invent an official barangay polygon or exact
+centroid without verified source data. Label the map clearly as approximate, with
+supporting copy: `Approximate Job area. Exact location becomes available after
+acceptance.` The exact Santa Ana display center/bounds must be verified during
+R5E-M1 preflight.
+
+**Worker after acceptance.** Only the assigned Worker on a `confirmed` Booking may
+receive the exact saved Job pin, a non-interactive in-app map, the manual
+house/street/landmark, barangay, city, and `Open in Maps`. `Open in Maps` sends the
+fixed Job destination to the installed navigation application. It does not publish or
+collect the Worker’s location inside SkillMatch.
+
+**Terminal Bookings.** For `completed`, `cancelled`, and any other terminal status:
+remove participant access to exact coordinates, the exact map, and `Open in Maps`;
+suppress the exact address/landmark under R3B; retain only authorized barangay/city
+history. Direct deep links must fail closed.
+
+**Client visibility.** The owning Client may view the exact pin while editing their
+open/unaccepted Job and while the resulting Booking is confirmed. Terminal Booking
+surfaces follow R3B and must not re-expose the exact pin.
+
+**Explicitly out of scope — NOT AUTHORIZED / REMOVED FROM R5E:** live Worker location;
+active Worker tracking; foreground Worker tracking; background Worker tracking;
+continuous Client tracking; movement history; Worker-location Realtime/Broadcast;
+Worker-location tables or RPCs; location update timers; foreground tracking services;
+background-location permission; Client watching Worker movement; Admin live-location
+map. `R5E-ACTIVE-*` is removed from the active roadmap. No Worker device-location
+permission is required.
+
+**Expo implementation direction (advisory libraries; do not install during R5E-D1).**
+Map library: `react-native-maps`. Client device-location helper: `expo-location`,
+foreground only. External navigation: existing `expo-linking`. `react-native-maps`
+provides the interactive Client picker. Worker “static map” means the same native map
+rendered as non-editable and interaction-disabled. Do not use Google Static Maps HTTP
+image URLs containing precise coordinates. Do not use `expo-maps` for this lane
+because it is alpha and unavailable in Expo Go under the inspected SDK 57
+documentation. Before the first mobile mutation, authenticate the remote Expo MCP and
+re-check the SDK 57 installation/configuration requirements. Maps native
+configuration requires a fresh development APK; the reused R5D APK cannot prove R5E.
+Google Maps Android credentials must be restricted to the SkillMatch Android package
+and authorized SHA-1 certificate. Do not commit an unrestricted API key. `expo-location`
+is authorized only for the Client’s explicit `Use Current Location` action. Do not
+enable `isAndroidBackgroundLocationEnabled`, `ACCESS_BACKGROUND_LOCATION`, or
+background location tasks.
+
+Expo Skills and Expo MCP remain advisory and cannot override this contract,
+`docs/DECISIONS.md`, `docs/SECURITY.md`, or `AGENTS.md`.
+
+**Implementation workflow.** Preserve:
+
+```
+preflight and confirmed seam
+→ Matt Pocock TDD
+→ tests/static checks
+→ Matt Pocock Standards review
+→ Matt Pocock Spec review
+→ runtime/privacy proof
+→ stage/commit
+→ push
+```
+
+R5E-DB1 security/RLS review must be sequential. Mobile-only reviews may run Standards
+and Spec in parallel only when no SQL/security surface is involved.
+
+Authorized future TDD seams after this lock is committed are recorded in
+`docs/SECURITY.md` (R5E-D1). No test is written until those seams are used in an
+authorized implementation lane.
+
 ### D-002 — Two-stage matching (2026-08-20) — LOCKED
 Stage 1 eligibility filter: matching required skill, worker availability, account
 active / not suspended. Stage 2 weighted ranking: 40 skill / 30 location /
@@ -452,6 +604,30 @@ The alternative strategy of changing what the scorer reads is **not** adopted.
 
 As of this entry BL-01B is implemented and **locally verified only**; the hosted project has
 not received it, and hosted deployment is separately gated.
+
+#### Amendment — Job-pin GPS for display, not matching (2026-09-15) — LOCKED
+
+Josh-approved R5E-D1 clarification. The original D-002 line “No live GPS/tracking” and
+the 2026-08-31 Location bullets “No GPS. No exact-distance claim. No zone scoring at
+this stage.” remain append-only provenance.
+
+GPS/coordinates are permitted only for Client-assisted Job-pin selection, authorized
+map display, and confirmed-Worker navigation.
+
+GPS/coordinates do **not** participate in matching.
+
+Preserve Skill 50 / Location 30 / Rating 20. Location scoring remains based only on
+the existing barangay/city rules (`same barangay + same city = 30`, `same city only =
+10`, otherwise `0`). Do not add exact distance, route distance, coordinate proximity,
+PostGIS matching, Worker Zones, or map-provider ranking data.
+
+Worker Zones remain research-controlled HOLD.
+
+Live Worker location, active tracking, background location, movement history, and
+Worker-location tables/RPCs are **NOT AUTHORIZED / REMOVED FROM R5E**. This amendment
+does not reopen live GPS/tracking.
+
+Effective status of D-002 from this amendment onward: LOCKED as amended.
 
 ### D-003 — Worker-choice booking (2026-08-20) — LOCKED
 System determines and ranks eligible workers and notifies them; workers choose whether
