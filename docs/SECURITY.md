@@ -1287,7 +1287,8 @@ or `public.portfolio_items`.
 Source-only at this record until a later hosted-apply gate. The contract lives in
 `supabase/migrations/20260914200000_r5d_client_portfolio_read.sql` and the
 D-001 amendment in `docs/DECISIONS.md`. This section does not claim hosted apply,
-Storage HTTP signed-URL runtime, or mobile Client UI.
+Storage HTTP signed-URL runtime, or mobile Client UI. Current R5D-CLIENT proof
+classification is the 2026-09-15 R5D-CLIENT-M1 record below.
 
 **Worker.** Own-row portfolio read/write is unchanged: `Workers can manage their own
 portfolio` on `public.portfolio_items`; Worker SELECT / INSERT / DELETE on
@@ -1318,6 +1319,43 @@ transient client-side artifacts of object SELECT; they are not stored in Postgre
 
 **Not added.** No public RPC, no new helper, no grant widening, no Admin portfolio
 write policy, no matching/ranking/eligibility change.
+
+### R5D-CLIENT-M1 confirmed-Client portfolio Android runtime proof — 2026-09-15
+
+**Status: R5D-CLIENT-M1 — CLOSED.** Backend authorization is hosted/runtime
+exercised. Mobile Client UI is implemented, committed, pushed, and
+Android-runtime proven. This record does not close R7 or final System Checking.
+
+**Source / Git.** Backend source SHA
+`9978238bad8efb7de630a56db176a364e89dcbfd`. Mobile implementation SHA
+`f4366ac01f266873f765ad513bb64d8b8bcea736` (`feat: add confirmed-client portfolio view`).
+
+**Runtime.** A disposable hosted Android fixture chain — one Job, one confirmed
+Booking, one portfolio item, and one private image — was created through the real
+Client and Worker flows, then removed exactly.
+
+Confirmed Client access used `/client/portfolio?bookingId=<confirmed-booking-uuid>`.
+Route authority used `bookingId`; no Worker ID was trusted in route parameters.
+The Client screen rendered the assigned Worker name, portfolio title, description,
+scale, and private image. The image used a private signed URL; no public URL path.
+The Client had no portfolio write controls.
+
+A retained completed Booking did not show View Portfolio. A stale completed-Booking
+deep link returned `This portfolio is unavailable.` Exact Client portfolio access
+was therefore proven while confirmed and denied after terminal state.
+
+**Non-regression / cleanup.** Matching fingerprints and retained business data were
+unchanged. The disposable Job, Booking, portfolio item, image metadata, Storage
+object, and two notifications were removed exactly. Final counts returned to the
+pre-fixture baseline.
+
+**Static.** Tests 220/220 PASS. TypeScript clean. Lint: only the three documented
+pre-existing warnings.
+
+**Not claimed.** The reused development APK was sufficient for this feature gate but
+is not a fresh R7 EAS-build proof. This record does not claim live-payment,
+matching-change, or broader portfolio-visibility beyond the confirmed-booking
+counterpart contract.
 
 ### Still deferred after BL-01A
 
