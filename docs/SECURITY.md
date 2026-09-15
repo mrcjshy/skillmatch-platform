@@ -1484,13 +1484,10 @@ address/barangay/city behavior and the absence of pins, coordinates, maps, navig
 handoff, device-location permissions, and active Worker location. Existing address
 fields are not R5E.
 
-**Current gate: R5E-DB1.** Private Job coordinate contract; atomic Job/skills/location
-creation; close exact-address/coordinate read exposure; confirmed-participant exact-pin
-RPC; terminal/nonparticipant denial; matching fingerprints unchanged.
+**Current gate: R5E-M1.** Client pin picker after R5E-DB1. R5E-DB1 is CLOSED.
 
-**Next:** R5E-M1 Client pin picker → R5E-M2 Worker approximate/exact static map +
-`Open in Maps` → R5E-N1 hosted/native privacy proof → remaining V2 UX → R6 → R7 →
-System Checking.
+**Next:** R5E-M2 Worker approximate/exact static map + `Open in Maps` → R5E-N1
+hosted/native privacy proof → remaining V2 UX → R6 → R7 → System Checking.
 
 **Locked Client flow.** Interactive map centered on the approved Santa Ana, Pateros
 service area. `Use Current Location` requests **foreground** device-location permission
@@ -1581,6 +1578,80 @@ preflight and confirmed seam
 
 R5E-DB1 security/RLS review is sequential. Mobile-only Standards and Spec may run in
 parallel only when the diff has no SQL/security surface.
+
+### R5E-DB1 — private Job coordinate contract — 2026-09-15
+
+**Status: R5E-DB1 — CLOSED + HOSTED PROVEN (local 56/56, hosted 56/56).** Backend/security
+foundation only. No mobile UI, Expo packages, maps, or `Open in Maps`.
+
+**Migration.** `supabase/migrations/20260915120000_r5e_db_01_private_job_locations.sql`
+applied locally by `db reset` and hosted by one `npx supabase db push --linked --skip-vault`
+after a dry-run that listed exactly that file.
+
+**Schema.** `private.job_locations` is a private one-to-one Job pin (`job_id` PK/FK to
+`public.job_postings(id) ON DELETE CASCADE`; finite latitude −90..90; finite longitude
+−180..180; `created_at` / `updated_at`). RLS enabled with no policies. `anon`,
+`authenticated`, `PUBLIC`, and `service_role` hold no table privileges. Public
+application-table count remains **13**. No latitude/longitude columns on
+`public.job_postings`. No Worker-location table.
+
+**Atomic create.** `public.create_my_job_with_location(...)` is postgres-owned
+`SECURITY DEFINER` with `SET search_path = ''`. Caller is `auth.uid()` via
+`private.is_active_client()` (42501 otherwise). Server writes `barangay = Santa Ana` and
+`city = Pateros`. Job, required skills, and private pin are inserted in one function
+transaction. Invalid coordinates, blank address, or unknown skills raise `22023` and
+leave no orphan row.
+
+**Owner update.** `public.update_my_open_job_location(uuid, text, float8, float8)`
+replaces address and pin only while the Job is `open` and owned by the caller. Accepted
+Jobs share `SM409`.
+
+**Pre-accept approximate area.** `public.get_job_approximate_area(uuid)` returns
+`job_id`, `barangay`, `city`, and `approximate_area_key` (`santa_ana_pateros` when those
+fields match the locked deployment). It does not return address or coordinates. Eligible
+open-Job Workers (via `private.compute_job_matches`) or the owning Client of an open Job.
+Otherwise `SM409`. `list_my_job_opportunities()` is unchanged (fingerprint
+`a135ec4ddac213df3f3ef147f93e0fc9`) and still has no address/latitude/longitude result
+columns.
+
+**Exact location.** `public.get_authorized_job_location(uuid)` returns address and pin
+only for the owning active Client of an `open` Job, or a `confirmed` Booking participant.
+Identity is `auth.uid()`. `completed`, `cancelled`, `no_show`, nonparticipants, and
+unknown ids share `SM409`. Legacy Jobs without a pin return the stored address and NULL
+coordinates.
+
+**Address SELECT hardening.** Table-level `SELECT` on `public.job_postings` is revoked
+from `anon` and `authenticated`. Column `SELECT` is re-granted for every Job column
+except `address`. Direct authenticated `SELECT address` is `42501`, including the
+owning Client. Inventoried readers: N7 Client INSERT still writes `address` and
+returns `id` only; Client dashboard and `fetchJobPaymentMethod` select non-address
+columns; `list_my_job_opportunities()` has no address/coordinate result columns;
+R3B `list_my_*_bookings()` remain SECURITY DEFINER status-gated address projection;
+matching reads barangay/city only. No public address view exists.
+
+**Matching.** Untouched. Hosted and local fingerprints after apply:
+`private.compute_job_matches(uuid)` `b9b686e6b0b9a87ee8618b5600b1ed62`;
+`public.match_workers_for_job(uuid)` `9239550ea9da726a3002bb3503d12f73`;
+`private.location_points(text,text,text,text)` `3da08e1ce3b7b7089ff51285a7c33dae`.
+These match the R5D-CLIENT hosted record. The earlier MATCH-DECISION-01 pair
+(`9433844085e4e0c45c6f68f996238b3c` / `a5d50042d3bee78833c765db6b37bd7e`) remains
+append-only recon transcription and is not the live catalog identity.
+Behavioral score for a same-barangay Santa Ana Worker with one matching skill and no
+rating rows remains Skill 50 / Location 30 / Rating 12.
+
+**Local verification.** Clean `db reset --local` applied 25 migrations. R5E-DB1 SQL
+matrix **56/56**. Existing suites: R5D-CLIENT-B1 **46/46**, R5D-IMG-B1 **17/17**,
+R5D-IMG-B2 **22/22**.
+
+**Hosted proof — 2026-09-15.** Migration history contains `20260915120000`. Catalog:
+`private.job_locations` present; public tables 13; authenticated cannot SELECT
+`job_postings.address` or `private.job_locations`. The same 50-case script ran through
+`npx supabase db query --linked` inside `BEGIN`/`ABORT` and returned **56/56**. Census
+before and after: `job_postings` 7, `bookings` 4, `private.job_locations` 0, zero
+`r5e-db1-%` users. No disposable hosted rows were retained. Protected Jobs were not
+modified.
+
+**Current gate: R5E-M1.** Client pin picker. Do not start it from this record.
 
 **R1-C session persistence — CLOSED at the recorded Expo Go/AVD proof boundary.**
 Prior proof included JavaScript reload, background/foreground, Expo Go process
