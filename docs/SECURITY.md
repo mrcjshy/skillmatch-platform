@@ -1445,10 +1445,36 @@ not reopen Phase 1.
 incorrectly reopened completed gates because earlier runtime and hosted closure
 records were not fully recovered. PROOF-RECON-01 is not the current active gate.
 
-**Current gate: MATCH-DECISION-01.** Resolve the new-Worker cold-start rating conflict
-(10/20 versus 12/20). No matching mutation without an explicit authoritative
-resolution. Next functional lane: R5E Pin Location / Static Map / authorized active
-location.
+**MATCH-DECISION-01 — CLOSED.** Authoritative new-Worker cold-start rating
+component: `12/20`.
+
+D-002 amendment dated 2026-08-31, canonical decision commit
+`9947e16ec9e20b45f6a4fde041a8e4f519a57ca9`, locked ranking Skill 50 / Location 30 /
+Rating 20. A Worker with no rating row receives computation-only neutral `3.0`;
+`3.0 / 5 × 20 = 12/20`; `is_new_worker = true`; do not display `3.0` as an actual
+received rating. Rating-row existence determines newness. A real `rating_avg = 0`
+is not converted into the cold-start value. BL-01B later reaffirmed `12/20`.
+Source implementation, recorded regression evidence, and recorded hosted function
+fingerprints remain consistent. No later locked decision changed the value. No
+matching mutation is required.
+
+`10/20` is **STALE HANDOFF/RECON TRANSCRIPTION — never an approved cold-start
+value**. The old `10` belonged to the superseded four-factor model's Rating weight
+(`40 Skill / 30 Location / 20 Verification / 10 Rating`). It was not a current
+`10/20` cold-start score. Original D-002 wording remains append-only historical
+provenance in `docs/DECISIONS.md` and was not edited by this gate.
+
+Hosted consistency is supported by the previously recorded 2026-09-15 function
+fingerprints and the verified absence of any later CREATE OR REPLACE migration for
+the matching functions. MATCH-DECISION-01 performed no fresh hosted catalog query
+because Supabase MCP required authentication. Previously recorded fingerprints:
+`private.compute_job_matches(uuid)` `9433844085e4e0c45c6f68f996238b3c`;
+`public.match_workers_for_job(uuid)` `a5d50042d3bee78833c765db6b37bd7e`.
+
+**Current gate: R5E-PREFLIGHT-01.** Read-only discovery of existing location/map
+code, schema, decisions, dependencies, and privacy boundaries. Produce a written
+R5E implementation contract before mutation. Next functional lane: R5E Pin
+Location / Static Map / authorized active location.
 
 **R1-C session persistence — CLOSED at the recorded Expo Go/AVD proof boundary.**
 Prior proof included JavaScript reload, background/foreground, Expo Go process
