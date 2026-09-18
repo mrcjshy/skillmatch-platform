@@ -112,15 +112,15 @@ BEGIN
   PERFORM pg_temp.pass(1, 'private.user_devices exists',
     to_regclass('private.user_devices') IS NOT NULL);
 
-  -- 2. public application table count remains 12
+  -- 2. public application table count is 13 (includes portfolio_item_images)
   SELECT count(*) INTO v_count
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public'
     AND c.relkind = 'r'
     AND c.relname NOT LIKE 'pg_%';
-  PERFORM pg_temp.pass(2, 'public table count is 12',
-    v_count = 12, 'count=' || v_count);
+  PERFORM pg_temp.pass(2, 'public table count is 13',
+    v_count = 13, 'count=' || v_count);
 
   -- 3. authenticated/anon cannot directly read/write
   BEGIN

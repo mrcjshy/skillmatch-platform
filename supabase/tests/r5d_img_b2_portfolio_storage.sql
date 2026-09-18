@@ -165,8 +165,17 @@ BEGIN
     'mimes=' || coalesce(array_to_string(v_mimes, ','), 'null'));
 
   SELECT count(*) INTO v_count FROM storage.buckets;
-  PERFORM pg_temp.pass(5, 'no unexpected extra bucket',
-    v_count = 1, 'buckets=' || v_count);
+  PERFORM pg_temp.pass(5, 'only portfolio and worker-identity buckets',
+    v_count = 2
+    AND EXISTS (
+      SELECT 1 FROM storage.buckets
+      WHERE id = 'portfolio' AND public IS FALSE
+    )
+    AND EXISTS (
+      SELECT 1 FROM storage.buckets
+      WHERE id = 'worker-identity' AND public IS FALSE
+    ),
+    'buckets=' || v_count);
 
   -- Seed one owned object as postgres so SELECT can be proven without
   -- depending on the INSERT policy under test in the same case.

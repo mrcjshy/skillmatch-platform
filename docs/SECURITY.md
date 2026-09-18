@@ -1684,6 +1684,124 @@ refunds, automatic cancellation rematching, and the rating-received notification
 remain deferred. No GAP number is created by BL-01A, and GAP-001 through GAP-004 are
 unchanged.
 
+### V3-1 — consent, worker identity, Santa Ana geofence — 2026-09-18
+
+**Status: HOSTED VERIFIED.** Project ref `uzbntxxwayqfkusyhodl`.
+DB1 consent = deployed. DB2 valid ID = deployed. DB3 review = deployed.
+DB4 geofence/title/description = deployed. This record is not native or
+emulator runtime proof. DB5 and BE-5 were still local-only at this gate;
+they are hosted in V3-5 below.
+
+Public application-table count remains **13**. New objects live in `private` plus
+reviewed `SECURITY DEFINER` RPCs. Matching fingerprints are unchanged:
+`private.compute_job_matches(uuid)` `b9b686e6b0b9a87ee8618b5600b1ed62`;
+`public.match_workers_for_job(uuid)` `9239550ea9da726a3002bb3503d12f73`;
+`private.location_points(text,text,text,text)` `3da08e1ce3b7b7089ff51285a7c33dae`;
+`public.list_my_job_opportunities()` `a135ec4ddac213df3f3ef147f93e0fc9`. GPS is not a
+matching input. `verify_worker()` remains the sole writer of `is_verified` /
+`verified_by`. Worker-choice `accept_job_opportunity()` is untouched.
+
+**Consent.** `private.user_consents` (`user_id` PK/FK to `public.users`). RLS on;
+`anon` / `authenticated` / `service_role` / `PUBLIC` hold no table privileges.
+Locked versions `2026-09-v1` / `2026-09-v1` via
+`private.current_legal_terms_version()` and
+`private.current_legal_privacy_version()`. RPCs:
+`public.record_my_consent(text,text)` and `public.get_my_consent()`. Own-user only.
+Unsigned or missing `public.users` row is `42501` for both `record_my_consent` and
+`get_my_consent`. Wrong version is `22023`.
+Same-version repeats keep original timestamps. Consent is not stored in Auth
+metadata. Corrective migration
+`20260918160000_v3_db_05_get_my_consent_users_row.sql` aligns `get_my_consent` to
+that unsigned-or-missing-`public.users`-row `42501` behavior. It was local-only
+at V3-1 and is hosted as of V3-5.
+
+**Worker valid ID.** `private.worker_id_documents` plus private Storage bucket
+`worker-identity` (`public=false`, 5 MiB, jpeg/png/webp). Path
+`{worker_profiles.id}/{uuid}.jpg|jpeg|png|webp`. Allowed `id_type`:
+`national_id`, `drivers_license`, `passport`, `umid`, `postal_id`. RPCs:
+`public.submit_my_valid_id(text,text)` and `public.get_my_identity_submission()`.
+Upload does not set `is_verified`. Approved submissions cannot be replaced
+(`SM409`). Storage SELECT/INSERT is own-worker folder only. No public URL.
+Already-verified pre-V3 Workers without identity documents remain grandfathered.
+They are not unverified.
+
+**ID review.** `public.list_workers_pending_id_review()`,
+`public.get_worker_identity_for_review(uuid)`,
+`public.approve_worker_identity(uuid)`, `public.reject_worker_identity(uuid,text)`.
+Non-admin `42501`. Missing/non-pending targets `SM409`. Approve calls
+`verify_worker()` then marks the document approved. `reject_worker_identity`
+does not modify `is_verified` or `verified_by`. Administrator Storage SELECT
+is limited to the exact pending object path
+via `private.admin_may_read_identity_object(text)`.
+
+**Geofence.** `private.assert_job_pin_in_service_area(float8,float8)` enforces the
+NAMRIA/PSA COD-AB v03 Santa Ana, Pateros polygon (HDX `cod-ab-phl`,
+`phl_admin4.shp`, `adm4_pcode` `PH1307606007`, current PSGC `1381701007`,
+EPSG:4326, 153 vertices including close). Applied to
+`create_my_job_with_location` and `update_my_open_job_location`. Vertices/edges
+count as inside. The shapefile display centroid is not the geofence.
+`authenticated` and `anon` `INSERT` on `public.job_postings` is revoked so a
+Client cannot bypass the pin check. Description is required. `job_postings.title`
+is retained and derived from the primary required skill name.
+
+**Local suites added.** `supabase/tests/v3_db_01_user_consent.sql`,
+`v3_db_02_worker_valid_id.sql`, `v3_db_03_worker_id_review.sql`,
+`v3_db_04_service_area_geofence.sql`. Existing R5E fixture pins were moved inside
+the official polygon so create/update still exercise location privacy, not a
+geofence miss.
+
+**Hosted — 2026-09-18 (V3-1).** Project `uzbntxxwayqfkusyhodl`. DB1 consent, DB2 valid ID,
+DB3 review, and DB4 geofence/title/description are deployed. HOSTED VERIFIED.
+This is not native or emulator runtime proof. Matching fingerprints remain:
+`private.compute_job_matches(uuid)` `b9b686e6b0b9a87ee8618b5600b1ed62`;
+`public.match_workers_for_job(uuid)` `9239550ea9da726a3002bb3503d12f73`;
+`private.location_points(text,text,text,text)` `3da08e1ce3b7b7089ff51285a7c33dae`;
+`public.list_my_job_opportunities()` `a135ec4ddac213df3f3ef147f93e0fc9`.
+Public application-table count remains **13**. At this gate DB5 and BE-5 were
+not yet hosted.
+
+**BE-5 design lock (hosted census, read-only, 2026-09-18).** Total Worker
+profiles = 3; available = 2; busy = 1; offline = 0. That census authorized
+narrowing `availability_status` CHECK to `available | busy` with no data rewrite.
+Deployed in V3-5.
+
+### V3-5 — DB5 consent correction + BE-5 two-state availability — 2026-09-18
+
+**Status: HOSTED VERIFIED.** Project ref `uzbntxxwayqfkusyhodl`
+(`livelihood-matching-platform`). Deployed by `npx supabase db push --linked
+--skip-vault` after a dry-run that listed exactly:
+
+- `20260918160000_v3_db_05_get_my_consent_users_row.sql`
+- `20260918170000_v3_db_06_worker_availability_two_state.sql`
+
+No analytics, email, Phosphor, seed, or role files were deployed. Local and
+remote migration history now match through `20260918170000`. This record is not
+new native/emulator runtime proof. V3-4 already proved the Worker ID + Admin
+approval path; this gate is schema/hosting only. The disposable Worker fixture
+was left intact for a later cleanup gate.
+
+**DB5.** Hosted `public.get_my_consent()` now requires an authoritative
+`public.users` row. Signed-out or missing `public.users` is `42501`. A
+`public.users` row with no consent still returns empty. EXECUTE remains
+authenticated-only: `authenticated` granted; `anon`, `PUBLIC`, and
+`service_role` revoked, matching the locked DB1 contract. Missing-user `42501`
+was proven locally; hosted users rows were not deleted to re-test that branch.
+
+**BE-5.** Hosted `worker_profiles_availability_status_check` accepts only
+`available | busy`. `offline` is no longer a valid stored value. Column
+`DEFAULT 'available'` is unchanged. No Worker row was rewritten: pre-deploy
+census was total 4, available 3, busy 1, offline 0, unexpected 0 (the fourth
+profile is the V3-4E disposable Worker). Post-deploy census is the same.
+Matching fingerprints are unchanged:
+`private.compute_job_matches(uuid)` `b9b686e6b0b9a87ee8618b5600b1ed62`;
+`public.match_workers_for_job(uuid)` `9239550ea9da726a3002bb3503d12f73`;
+`private.location_points(text,text,text,text)` `3da08e1ce3b7b7089ff51285a7c33dae`;
+`public.list_my_job_opportunities()` `a135ec4ddac213df3f3ef147f93e0fc9`.
+`verify_worker()` remains the sole writer of `is_verified` / `verified_by`.
+
+**Local suites added.** `supabase/tests/v3_db_05_get_my_consent_users_row.sql`,
+`v3_db_06_worker_availability_two_state.sql`.
+
 Future gap template:
 
 ```

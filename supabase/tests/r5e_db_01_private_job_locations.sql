@@ -281,8 +281,8 @@ BEGIN
       500,
       'cod',
       ARRAY[skill_id],
-      14.55801,
-      121.06942
+      14.54445140,
+      121.07205067
     );
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(17, 'owning Client atomic create returns job id',
@@ -313,7 +313,7 @@ BEGIN
     FROM public.get_authorized_job_location(job_open);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(20, 'owning Client reads exact pin while Job is open',
-      v_lat = 14.55801 AND v_lng = 121.06942,
+      v_lat = 14.54445140 AND v_lng = 121.07205067,
       coalesce(v_lat::text, 'null') || ',' || coalesce(v_lng::text, 'null'));
   EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.clear_jwt();
@@ -434,7 +434,7 @@ BEGIN
     PERFORM public.create_my_job_with_location(
       'R5E-DB1 Bad Skill', 'x', '1 Street', now() + interval '2 days',
       100, 'cod', ARRAY['99999999-9999-4999-8999-999999999999'::uuid],
-      14.55, 121.07);
+      14.54445140, 121.07205067);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(29, 'invalid skill rejected', false, 'accepted');
   EXCEPTION WHEN OTHERS THEN
@@ -450,7 +450,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
     PERFORM public.create_my_job_with_location(
       'R5E-DB1 Worker Create', 'x', '1 Street', now() + interval '2 days',
-      100, 'cod', ARRAY[skill_id], 14.55, 121.07);
+      100, 'cod', ARRAY[skill_id], 14.54445140, 121.07205067);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(31, 'Worker create denied', false, 'accepted');
   EXCEPTION WHEN OTHERS THEN
@@ -463,7 +463,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
     PERFORM public.create_my_job_with_location(
       'R5E-DB1 Blank Addr', 'x', '   ', now() + interval '2 days',
-      100, 'cod', ARRAY[skill_id], 14.55, 121.07);
+      100, 'cod', ARRAY[skill_id], 14.54445140, 121.07205067);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(32, 'blank address rejected', false, 'accepted');
   EXCEPTION WHEN OTHERS THEN
@@ -486,13 +486,13 @@ BEGIN
     PERFORM pg_temp.jwt(client_own);
     SET LOCAL ROLE authenticated;
     PERFORM public.update_my_open_job_location(
-      job_open, '456 Other Street, Santa Ana', 14.56000, 121.07000);
+      job_open, '456 Other Street, Santa Ana', 14.54525377225, 121.07293277825);
     SELECT latitude, longitude
       INTO v_lat, v_lng
     FROM public.get_authorized_job_location(job_open);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(34, 'owning Client can update open Job pin and address',
-      v_lat = 14.56000 AND v_lng = 121.07000,
+      v_lat = 14.54525377225 AND v_lng = 121.07293277825,
       coalesce(v_lat::text, 'null'));
   EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.clear_jwt();
@@ -512,8 +512,8 @@ BEGIN
       800,
       'cod',
       ARRAY[skill_id],
-      14.55111,
-      121.06111
+      14.54359874,
+      121.0719468515
     );
     PERFORM pg_temp.clear_jwt();
   EXCEPTION WHEN OTHERS THEN
@@ -542,7 +542,7 @@ BEGIN
     FROM public.get_authorized_job_location(job_conf);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(36, 'confirmed assigned Worker receives exact pin',
-      v_address = '789 Confirmed Street' AND v_lat = 14.55111 AND v_lng = 121.06111,
+      v_address = '789 Confirmed Street' AND v_lat = 14.54359874 AND v_lng = 121.0719468515,
       coalesce(v_address, 'null') || ' ' || coalesce(v_lat::text, 'null'));
   EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.clear_jwt();
@@ -568,7 +568,7 @@ BEGIN
     SELECT latitude INTO v_lat FROM public.get_authorized_job_location(job_conf);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(38, 'owning Client receives exact pin while confirmed',
-      v_lat = 14.55111, coalesce(v_lat::text, 'null'));
+      v_lat = 14.54359874, coalesce(v_lat::text, 'null'));
   EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(38, 'owning Client receives exact pin while confirmed',
@@ -591,7 +591,7 @@ BEGIN
     PERFORM pg_temp.jwt(client_own);
     SET LOCAL ROLE authenticated;
     PERFORM public.update_my_open_job_location(
-      job_conf, 'should fail', 14.55, 121.07);
+      job_conf, 'should fail', 14.54445140, 121.07205067);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(40, 'owner cannot update pin after acceptance', false, 'updated');
   EXCEPTION WHEN OTHERS THEN
@@ -606,7 +606,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
     job_done := public.create_my_job_with_location(
       'R5E-DB1 Completed', 'fixture done', '1 Done Street',
-      now() + interval '4 days', 200, 'cod', ARRAY[skill_id], 14.55222, 121.06222);
+      now() + interval '4 days', 200, 'cod', ARRAY[skill_id], 14.54355724325, 121.07118653675);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.jwt(worker_asg);
     SET LOCAL ROLE authenticated;
@@ -651,7 +651,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
     job_cancel := public.create_my_job_with_location(
       'R5E-DB1 Cancelled', 'fixture cancel', '1 Cancel Street',
-      now() + interval '5 days', 200, 'cod', ARRAY[skill_id], 14.55333, 121.06333);
+      now() + interval '5 days', 200, 'cod', ARRAY[skill_id], 14.544682182, 121.07129711875);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.jwt(worker_asg);
     SET LOCAL ROLE authenticated;
@@ -684,7 +684,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
     job_noshow := public.create_my_job_with_location(
       'R5E-DB1 NoShow', 'fixture noshow', '1 Noshow Street',
-      now() + interval '6 days', 200, 'cod', ARRAY[skill_id], 14.55444, 121.06444);
+      now() + interval '6 days', 200, 'cod', ARRAY[skill_id], 14.54508736575, 121.07325456375);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.jwt(worker_asg);
     SET LOCAL ROLE authenticated;
@@ -816,11 +816,11 @@ BEGIN
       v_key = 'santa_ana_pateros'
       AND EXISTS (
         SELECT 1 FROM private.job_locations WHERE job_id = job_open
-          AND latitude = 14.56000 AND longitude = 121.07000
+          AND latitude = 14.54525377225 AND longitude = 121.07293277825
       )
       AND EXISTS (
         SELECT 1 FROM private.job_locations WHERE job_id = job_conf
-          AND latitude = 14.55111 AND longitude = 121.06111
+          AND latitude = 14.54359874 AND longitude = 121.0719468515
       ),
       coalesce(v_key, 'null'));
   EXCEPTION WHEN OTHERS THEN
@@ -858,7 +858,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
     PERFORM public.create_my_job_with_location(
       'R5E-DB1 No Skills', 'x', '1 Street', now() + interval '2 days',
-      100, 'cod', ARRAY[]::uuid[], 14.55, 121.07);
+      100, 'cod', ARRAY[]::uuid[], 14.54445140, 121.07205067);
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(54, 'empty skill list rejected', false, 'accepted');
   EXCEPTION WHEN OTHERS THEN
