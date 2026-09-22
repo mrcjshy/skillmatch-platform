@@ -1238,6 +1238,48 @@ That matrix is **LOCAL only** for the original R5-DB source gate. Later hosted a
 and native implementation closed the implementation lane as recorded in the Status
 line above.
 
+### R6 Worker opportunity invalidation — 2026-09-22
+
+The R6 responsiveness extension adds private topic `worker:opportunities` and
+event `job_opportunities_changed`. Its deployed contract is
+`supabase/migrations/20260922071511_r6_worker_opportunity_invalidation.sql`.
+The earlier R5 two-policy inventory above is historical: R6 adds one receive
+policy without replacing either existing notification or confirmed-Booking policy.
+
+**Authorization and payload.** `FOR SELECT TO authenticated` on
+`realtime.messages` requires `extension = 'broadcast'`, exact
+`realtime.topic() = 'worker:opportunities'`, and `private.is_active_worker()`.
+Authenticated subscribers are RECEIVE-ONLY; no authenticated realtime INSERT
+path or client-originated Broadcast is added. The mobile channel is private.
+The trigger supplies only `{}`: no Job id, description, Client identity, address,
+skill ids, coordinates, or ranking. A transport-generated id is not business data.
+Broadcast is not authoritative business state or evidence of Job eligibility.
+
+**Emission.** PostgreSQL-owned, private, trigger-only
+`private.r6_broadcast_job_opportunities_changed()` is SECURITY DEFINER with an
+empty search path and EXECUTE revoked from PUBLIC, anon, authenticated, and
+service_role. It calls `realtime.send` with the exact event/topic and private=true.
+AFTER STATEMENT INSERT/UPDATE/DELETE triggers on both `public.job_postings` and
+`public.job_skills` invalidate opportunity freshness in the write transaction.
+These triggers do not mutate business rows, create Bookings or notifications,
+or replace matching, acceptance, payment, lifecycle, or business-table RLS.
+
+**Native read boundary.** An eligible mounted Worker Home subscribes and always
+re-reads `list_my_job_opportunities()` through its existing authoritative loader
+on invalidation and SUBSCRIBED/reconnect. Focus also revalidates. Payload contents
+never select, append, remove, or rank a Job. Duplicate/replayed events cause only
+extra reads, not business changes. Mobile coalesces reads to one in flight with
+one pending follow-up, suppresses obsolete results, and cleans up subscriptions.
+There is no polling or automatic opportunity selection/navigation: the Worker
+chooses a card. Matching, ranking, and eligibility remain server-authoritative
+and unchanged; receive authorization does not imply opportunity eligibility.
+
+F5B deployed the migration once. F5C proved the new matching F5 card present on
+an already-mounted Worker Home within 40 seconds, with only a later reveal-only
+scroll; exact arrival latency was not instrumented. No Worker reload, refresh,
+focus change, or navigation was used to cause the reread. The rollback-based
+local SQL suite covers the new receive/write boundary and both tables' actions.
+
 ### R5B Android OS push — 2026-09-13
 
 **Status: R5B — CLOSED + DEVELOPMENT-APK RUNTIME PROVEN.** Do not schedule another
