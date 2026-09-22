@@ -173,6 +173,76 @@ export function extractInteractionText(value: unknown): string | null {
   return null;
 }
 
+export type ProviderClassification =
+  | { kind: "success"; interaction_status: "completed" }
+  | {
+    kind: "failure";
+    stage:
+      | "provider_http"
+      | "provider_response_too_large"
+      | "provider_invalid_json"
+      | "provider_interaction_not_completed"
+      | "provider_missing_output";
+    http_status?: number;
+    interaction_status?: string;
+  };
+
+/** Classifies only safe provider response metadata; it never returns body text. */
+export function classifyProviderResponse(
+  httpStatus: number,
+  body: unknown,
+  options: { responseTooLarge?: boolean; invalidJson?: boolean } = {},
+): ProviderClassification {
+  if (httpStatus < 200 || httpStatus >= 300) {
+    return { kind: "failure", stage: "provider_http", http_status: httpStatus };
+  }
+  if (options.responseTooLarge) {
+    return { kind: "failure", stage: "provider_response_too_large" };
+  }
+  if (options.invalidJson) {
+    return { kind: "failure", stage: "provider_invalid_json" };
+  }
+  const interactionStatus = isObject(body) && typeof body.status === "string"
+    ? body.status
+    : null;
+  if (interactionStatus !== "completed") {
+    return {
+      kind: "failure",
+      stage: "provider_interaction_not_completed",
+      ...(interactionStatus === null ? {} : { interaction_status: interactionStatus }),
+    };
+  }
+  if (extractInteractionText(body) === null) {
+    return { kind: "failure", stage: "provider_missing_output" };
+  }
+  return { kind: "success", interaction_status: "completed" };
+}
+
+export function classifyProviderException(error: unknown):
+  | { stage: "provider_timeout" }
+  | { stage: "provider_network" } {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return { stage: "provider_timeout" };
+  }
+  if (isObject(error) && error.name === "AbortError") {
+    return { stage: "provider_timeout" };
+  }
+  return { stage: "provider_network" };
+}
+
+function logProviderDiagnostic(
+  diagnostic:
+    | ProviderClassification
+    | { stage: "provider_timeout" }
+    | { stage: "provider_network" },
+  elapsedMs: number,
+): void {
+  const event = "kind" in diagnostic && diagnostic.kind === "success"
+    ? { event: "skillmatch_ai_provider_success", interaction_status: diagnostic.interaction_status }
+    : { event: "skillmatch_ai_provider_failure", ...diagnostic };
+  console.log(JSON.stringify({ ...event, elapsed_ms: elapsedMs }));
+}
+
 function firstEnv(...names: string[]): string | undefined {
   for (const name of names) {
     const raw = Deno.env.get(name);
@@ -351,6 +421,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  const providerStartedAt = Date.now();
   try {
     const providerResponse = await fetch(GEMINI_API, {
       method: "POST",
@@ -370,18 +441,33 @@ export async function handleRequest(req: Request): Promise<Response> {
         },
       }),
     });
-    if (!providerResponse.ok) return fail(502, "provider_unavailable");
+    if (!providerResponse.ok) {
+      const diagnostic = classifyProviderResponse(providerResponse.status, null);
+      logProviderDiagnostic(diagnostic, Date.now() - providerStartedAt);
+      return fail(502, "provider_unavailable");
+    }
 
     const providerText = await providerResponse.text();
     if (providerText.length > MAX_PROVIDER_RESPONSE_CHARS) {
+      logProviderDiagnostic(
+        classifyProviderResponse(providerResponse.status, null, { responseTooLarge: true }),
+        Date.now() - providerStartedAt,
+      );
       return fail(502, "provider_unavailable");
     }
     let providerBody: unknown;
     try {
       providerBody = JSON.parse(providerText);
     } catch {
+      logProviderDiagnostic(
+        classifyProviderResponse(providerResponse.status, null, { invalidJson: true }),
+        Date.now() - providerStartedAt,
+      );
       return fail(502, "provider_unavailable");
     }
+    const diagnostic = classifyProviderResponse(providerResponse.status, providerBody);
+    logProviderDiagnostic(diagnostic, Date.now() - providerStartedAt);
+    if (diagnostic.kind !== "success") return fail(502, "provider_unavailable");
     const guidance = extractInteractionText(providerBody);
     if (guidance === null) return fail(502, "provider_unavailable");
 
@@ -391,7 +477,8 @@ export async function handleRequest(req: Request): Promise<Response> {
       guidance,
       source: "gemini",
     });
-  } catch {
+  } catch (error) {
+    logProviderDiagnostic(classifyProviderException(error), Date.now() - providerStartedAt);
     return fail(502, "provider_unavailable");
   } finally {
     clearTimeout(timeout);
