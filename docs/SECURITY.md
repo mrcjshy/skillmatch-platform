@@ -1892,6 +1892,52 @@ The new function separately passed transactional PL/pgSQL validation with
 `check_function_bodies = on` and `plpgsql.extra_warnings = 'all'` (no warnings),
 and behavioral execution in the rollback test.
 
+**Hosted AA-01C verification — 2026-09-23.** Implementation commit
+`b90a052c0d85726314c17f462f4e061a9ed5ba72` was pushed to `origin/main`
+before deployment. A linked-project dry run for `uzbntxxwayqfkusyhodl`
+listed only `20260923012025_aa01_admin_aggregate_summary.sql`, with no seeds
+or roles. `npx.cmd --no-install supabase db push --linked --skip-vault` then
+applied exactly that file; its SHA-256 is
+`F0D74FCB2540DA255C7ADCB73A207EE6178E61E29628E4DFCF3E251FA47399C1`.
+Hosted migration history contains version `20260923012025` exactly once.
+
+The installed `public.get_admin_analytics_summary()` has zero arguments and
+the approved eleven-column return shape (`as_of timestamptz`; six `bigint`
+totals; four `jsonb` breakdowns). Catalog inspection and the installed
+definition match the migration: `postgres` owner, `STABLE SECURITY DEFINER`,
+empty `search_path`, schema-qualified reads, and the active-Admin check through
+`auth.uid()` and `private.is_admin()`. Only `authenticated` has EXECUTE among
+application roles; `PUBLIC`, `anon`, and `service_role` do not. The migration
+adds no Admin business-table policy or write grant.
+
+An existing active Admin was checked through a caller-scoped SQL claims harness
+inside a read-only, repeatable-read transaction. This is **SQL authorization
+proof, not native Admin UI proof**. The RPC returned exactly one row with a
+server-generated `as_of`, the approved typed fields and fixed JSON keys, zero
+buckets, and no identity, contact, location, message, or ID-document fields.
+Independent counts in the same snapshot reconciled every metric: Workers 7
+(verified 2; pending ID review 0), Clients 5; Jobs 15 (`open` 5, `matched` 1,
+`completed` 8, `cancelled` 1, `unset` 0); Bookings 10 (`confirmed` 1,
+`completed` 8, `cancelled` 1, `pending` 0, `no_show` 0); payments `cod/paid` 3,
+`qrph/paid` 2, `qrph/pending` 2, `unset/pending` 3, with every other fixed cell
+zero; Reports 2 (`submitted` 1, `dismissed` 1, other statuses 0), needing
+attention 1. The breakdowns sum to their base counts. All retained
+application rows were counted without account-activity or fixture filters;
+there were no inactive Worker/Client rows in this snapshot. Child-row totals
+(Worker skills 11, Job skills 17, messages 9, ID documents 1) did not inflate
+base counts. Existing Worker and Client callers and the unauthenticated role
+were denied with `42501` in read-only SQL claims checks. Fixture-dependent
+denials remain covered by the local 22-case suite; no hosted fixtures were made.
+
+The pre/post hosted business census was identical: users 14 (Workers 7,
+Clients 5, active Admins 2), Worker profiles 4, Jobs 15, Bookings 10,
+Reports 2, ID documents 1, messages 9, and retained-test-marker user/Job
+counts 0/0. No business-row change was observed. The earlier separate local
+schema lint did **not** inspect the rolled-back AA-01 function; its own
+in-transaction compilation and hosted execution are the applicable function
+evidence. The native Admin dashboard and native runtime proof remain pending.
+The local-only status above records the earlier AA-01B gate.
+
 Future gap template:
 
 ```
