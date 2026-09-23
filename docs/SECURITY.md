@@ -2003,6 +2003,96 @@ preflight reviewed before implementation. AA-07 remains the separate
 analytics documentation synchronization gate; no Second Brain or manuscript
 sync is recorded here.
 
+### AA-04 — Administrator Worker and Client directory boundary — local implementation
+
+The `20260923064708_aa04_admin_directories.sql` migration adds only
+`get_admin_worker_directory` and `get_admin_client_directory`; it changes no
+table, column, relationship, or direct table grant. Both are postgres-owned,
+`STABLE` `SECURITY DEFINER` functions with empty `search_path`, explicit
+`auth.uid()` plus `private.is_admin()` checks before argument validation, and
+EXECUTE granted only to `authenticated` among application roles. Signed-out,
+Worker, Client, and inactive Administrator callers receive `42501`.
+
+Each function returns one row containing matching `total_count`, requested
+`page` and `page_size`, and a JSON array of only the approved role's summary
+fields. Search is a trimmed, case-insensitive, literal substring of
+`users.full_name`. The corrected SQL source uses the ECMAScript `trim()` boundary
+set (U+0009..000D, U+0020, U+00A0, U+1680, U+2000..200A, U+2028..2029,
+U+202F, U+205F, U+3000, U+FEFF), matching Mobile's search preparation;
+length is checked as 100 Unicode code points after trimming. Page size is
+bounded to 1..50 and rows are ordered by
+`users.created_at DESC NULLS LAST, users.id DESC`. Worker eligibility comes
+from `users.role = 'worker'`; a unique, optional `worker_profiles` left join
+supplies profile metadata without dropping Workers who lack a profile or
+promoting a non-Worker with an unrelated profile. `is_active IS TRUE` produces
+a boolean account status even for retained NULL values. No email, phone,
+location, identity evidence, booking, report, payment, rating, strike, or
+portfolio field is projected.
+
+**Earlier implementation evidence.** Local migration SQL was applied
+persistently and the local function definitions were later persistently
+replaced. The earlier `supabase/tests/aa04_admin_directories.sql`
+fixture/assertion transaction rolled back its synthetic data and passed 34/34
+checks against those earlier definitions. The earlier Mobile helper run passed
+4/4. Neither run captured test-time source hashes; neither is evidence for the
+corrected SQL or Mobile source. The local installation implied no hosted change.
+
+**Focused corrections and Mobile checks.** Both RPCs now use the boundary set
+above; Mobile validates trimmed Unicode code points, and positive-total empty
+pages display page-specific wording while retaining the count and Previous
+control. The corrected SQL test source adds boundary-whitespace,
+trim-before-length, and supplementary-Unicode assertions for both RPCs.
+Following the final source edit, the focused Mobile helper file passed 6/6,
+`npx --no-install tsc --noEmit` exited 0, and ESLint without autofix exited 0
+with no errors or warnings across the eight AA-04 Mobile files. SHA-256 values
+were captured before and after those checks and matched for the migration,
+SQL test, this security record at its pre-closeout revision, and the Mobile
+helper, helper test, and shared directory component. The other five approved
+Mobile files have capture-time hashes at closeout, not retrospective test-time
+hashes. No SQL was executed in the focused-corrections gate.
+
+**Corrected local SQL rehearsal.** Two preceding rehearsal attempts stopped
+before execution and supplied no SQL assertion evidence. One amended harness
+then ran once against the verified local `supabase_db_skillmatch-web` container
+(local mapping 54322, Unix socket, database `postgres`, PostgreSQL 17.6). Its
+single `BEGIN`...`ABORT` transaction set local lock/statement timeouts of 3s/30s,
+dropped only `public.get_admin_worker_directory(text,integer,integer)` and
+`public.get_admin_client_directory(text,integer,integer)` with `RESTRICT`, then
+executed the unchanged corrected migration, checked the installed definitions,
+and ran the unchanged fixture/assertion body. The drops were harness-only; they
+are absent from the migration. `psql -X` ran with `ON_ERROR_STOP=on` and
+`ON_ERROR_ROLLBACK=off`; its actual client exit code was 0. All **46/46** SQL
+assertions passed, including both RPCs' new boundary and Unicode cases.
+Expected `22023` and `42501` exceptions were caught by assertions; these were
+neither HTTP results nor unhandled client errors. Corrected definitions were
+confirmed inside the transaction at temporary OIDs 51377/51378. Terminal
+`ABORT` printed `ROLLBACK`, and the session ended.
+
+**Restoration and accepted local exception.** Bounded before/after baseline
+files were byte-identical (SHA-256
+`6D8F5BE0F7606E9E580ACA43816A913D4FC30D103478EC20D20ECC823C378926`).
+Original directory-function OIDs 51331/51332, definitions, ownership, ACLs,
+configuration, and security metadata were restored. `private.is_admin()`, the
+inspected event-trigger definitions/enabled states, and GraphQL sequence
+identity/configuration/owner/ACL matched. `auth.users`, `public.users`, and
+`public.worker_profiles` each had zero rows before and after, matching
+fingerprints and zero synthetic-identifier counts. Local migration history
+remained 32 rows with a matching fingerprint and zero AA-04 entries.
+Separately, `graphql.seq_schema_version` changed from `5111/true` to
+`5130/true` (`last_value/is_called`), the explicitly accepted persistent LOCAL
+infrastructure effect of normal enabled DDL event triggers. Concurrent
+activity was not excluded, so the difference is not an exact event count or
+exclusive attribution. The checks do not establish full-instance or
+bit-for-bit restoration. The executed harness is
+`%TEMP%\skillmatch-aa04-local-rehearsal-20260923-152334-bd6194cf\harness-amended.sql`
+(SHA-256 `AC847BB275F6382B369C130B0924D9858C3CB8811938FD44774A4020B7B2DA03`).
+
+The corrected AA-04 functions were **not persistently installed**; the prior
+local definitions remain. No hosted installation/verification, HTTP proof,
+native runtime, standalone APK, or physical-device proof is claimed. Separate
+offset-page requests have no stable-snapshot guarantee. AA-04 remains open
+overall, and AA-07 Second Brain synchronization remains pending.
+
 Future gap template:
 
 ```
