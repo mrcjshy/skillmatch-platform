@@ -1844,6 +1844,54 @@ Matching fingerprints are unchanged:
 **Local suites added.** `supabase/tests/v3_db_05_get_my_consent_users_row.sql`,
 `v3_db_06_worker_availability_two_state.sql`.
 
+### AA-01B — Administrator aggregate read boundary — 2026-09-23
+
+**Status: LOCAL IMPLEMENTATION / LOCAL TEST EVIDENCE ONLY.** The forward-only
+`20260923012025_aa01_admin_aggregate_summary.sql` migration adds exactly
+`public.get_admin_analytics_summary()`; the focused rollback test is
+`supabase/tests/aa01_admin_aggregate_summary.sql`. No application table,
+column, index, trigger, RLS policy, or business writer is added. Hosted
+deployment is **PENDING**. The native Admin dashboard is **NOT IMPLEMENTED** by
+this gate. No hosted or native runtime proof is claimed.
+
+The zero-argument, one-row RPC returns `as_of timestamptz`, `bigint` totals for
+Workers, verified Workers, pending Worker verifications, Clients, completed
+Bookings, and Reports needing attention, plus fixed-key `jsonb` breakdowns of
+Job status, Booking status, Booking payment method/status, and Report status.
+The snapshot counts all retained `public.users` application accounts, including
+inactive accounts and synthetic fixtures; Auth-only records are excluded.
+Pending verification counts distinct Worker accounts with a pending submission
+in the current `list_workers_pending_id_review()` queue, not every unverified
+profile. Payment counts use `public.bookings` state, not Job posting-time
+intent, and include explicit zeroes and `unset` buckets for nullable legacy
+fields. Completed Bookings do not imply payment; `submitted` plus
+`under_review` Reports are workload, not strikes or unread notifications.
+Each base entity is counted independently so child rows cannot multiply it.
+
+The function is postgres-owned, `STABLE SECURITY DEFINER`, with empty
+`search_path` and schema-qualified relations. It derives caller identity from
+`auth.uid()` and requires the existing `private.is_admin()` active-Admin gate;
+all denied callers receive `42501`. EXECUTE is revoked from `PUBLIC`, `anon`,
+`authenticated`, and `service_role`, then granted only to `authenticated`.
+It returns aggregates only, grants no broad Admin table access, and performs
+no business writes.
+
+**Local evidence.** The focused migration plus test ran in one local database
+transaction and ended with `ROLLBACK`: **22/22 PASS**. It covered active Admin,
+signed-out/Worker/Client/missing-account/inactive-Admin denial, direct
+`service_role` denial, ACL/function properties, empty zero buckets, all current
+status/payment categories and legacy NULLs, pending-ID versus unverified
+profile membership, child-row inflation, exact response keys, private-field
+absence, and unchanged business rows. The 12 pre-existing local SQL test files
+also passed (316 cases); the locally absent R6 migration was supplied only
+inside that test's rollback transaction. No migration was persistently applied.
+`supabase db lint --local --schema public,private --level warning --fail-on error`
+exited 0 with four warnings in pre-existing functions; the new function was
+not present in the standing local schema for that separate lint command.
+The new function separately passed transactional PL/pgSQL validation with
+`check_function_bodies = on` and `plpgsql.extra_warnings = 'all'` (no warnings),
+and behavioral execution in the rollback test.
+
 Future gap template:
 
 ```
