@@ -1938,6 +1938,71 @@ in-transaction compilation and hosted execution are the applicable function
 evidence. The native Admin dashboard and native runtime proof remain pending.
 The local-only status above records the earlier AA-01B gate.
 
+### AA-03 — Santa Ana Geographic Analytics closeout — 2026-09-23
+
+**Status: COMPLETE WITH RETAINED EVIDENCE LIMITATIONS.** The approved final
+joint-disclosure and daily-publication-cache contract is implemented by
+`20260923035653_aa03_geographic_analytics.sql`, with focused rollback tests in
+`supabase/tests/aa03_geographic_analytics.sql`. Corrected backend commit
+`a67a5a7e2b4280f8929024cf95f638d23c575343` was pushed to GitHub `main`.
+The committed migration SHA-256 is
+`8457e6d7c9b37bfbe38a05b1fa48a067f8b4f79a1826f0deae31e2c723425736`.
+No test-time hashes of the two source files were recorded, so retrospective
+tested-byte identity is not claimed.
+
+**Local proof.** The corrected focused run exited 0 with **41 PASS** assertions
+and `ROLLBACK`. Its regression rejected the original cache-miss return-path
+flaw mutant. Two independent sessions proved first-publication advisory-lock
+overlap and matching winner/stored responses. Bounded instrumentation
+identified the state-count cap; the unchanged production helper failed closed
+on the same input. The application database retained no AA-03 objects,
+migration-history row, or synthetic fixtures after rollback, and the
+disposable database was removed. Evidence index:
+`%TEMP%\skillmatch-aa03r-evidence-manifest-20260923.txt`.
+
+**Hosted migration and catalog.** Project `uzbntxxwayqfkusyhodl` received
+exactly one AA-03 migration-history entry. Catalog/security verification
+found one new physical infrastructure table,
+`private.admin_geographic_publications`, owned by `postgres` with RLS enabled,
+date/version primary-key uniqueness, and no direct ordinary-client table
+access. It added zero application/business tables and changed zero existing
+business columns or relationships. The three private immutable invoker
+helpers are not executable by application roles. The zero-argument public
+RPC is a postgres-owned `VOLATILE SECURITY DEFINER` function with an empty
+`search_path`; only `authenticated` has EXECUTE among application roles.
+AA-01's definition and privileges remained unchanged.
+
+**Hosted SQL runtime.** An existing active Admin called
+`public.get_admin_geographic_analytics()` and created the frozen Manila-date
+publication for 2026-09-23. The response and persisted row matched exactly:
+`as_of=2026-09-23T06:19:59.016494+00:00`,
+`aggregation_version=aa03-geo-v1`,
+`grid_version=sa-pateros-626f7138-g005-v1`, `coverage_status=partial`,
+`release_status=insufficient_data`, and `cells=[]`. A second same-day Admin
+call returned the identical row. Worker, Client, and signed-out SQL-claims
+calls returned `42501` without analytics data. The cache remained exactly
+one row; the installed RPC's only write targets are its private cache, and
+this gate performed no business-row mutation. `insufficient_data` is a valid
+privacy-preserving outcome, not a failed release.
+
+**Retained limits.** HTTP/PostgREST Admin, Worker, Client, and signed-out
+verification was not established because safe existing role JWTs were not
+available locally. Defer that role evidence to AA-06 integrated verification
+if authenticated sessions are naturally available; do not create accounts,
+reset credentials, expose tokens, or mutate retained identities solely for
+this gap. No safe inactive Admin existed for hosted denial proof. Hosted
+concurrent-first-request and real-midnight rollover were not exercised;
+retain the local two-session and dated-row retention evidence without
+labeling them hosted or real-midnight passes. Native/Mobile UI proof is not
+part of this backend closeout.
+
+AA-03 needs no further implementation, schema work, fixtures, test reruns,
+cache reset, or hosted mutation at this closeout. Proceed only to AA-04
+Searchable/Paginated Worker and Client Directories, with its contract and
+preflight reviewed before implementation. AA-07 remains the separate
+analytics documentation synchronization gate; no Second Brain or manuscript
+sync is recorded here.
+
 Future gap template:
 
 ```

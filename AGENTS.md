@@ -172,7 +172,7 @@ agents propose, Josh decides.
 
 ## STATUS
 
-Snapshot date: 2026-09-05. Updated only at phase boundaries.
+Snapshot date: 2026-09-23. Updated only at phase boundaries.
 
 ### Phase 0 — historical record (snapshot 2026-08-22)
 
@@ -194,7 +194,7 @@ Snapshot date: 2026-09-05. Updated only at phase boundaries.
   "Hosted Phase 0 deployment record — 2026-08-22".
 - Phase 0 implementation, verification, and hosted deployment are complete.
 
-### Current state (snapshot 2026-09-05)
+### Prior state (snapshot 2026-09-05)
 
 - The native application exists. `skillmatch-mobile` carries the implemented Worker,
   Client, and Administrator interfaces; it is a sibling repository with no Git remote.
@@ -216,3 +216,19 @@ Snapshot date: 2026-09-05. Updated only at phase boundaries.
   not carried by this file.
 - Any further hosted operation remains separately gated per the Supabase targeting rule,
   as do commit, integration, and Git push per the workflow loop.
+
+### AA-03 — Santa Ana Geographic Analytics (snapshot 2026-09-23)
+
+- Status: COMPLETE with retained evidence limitations. The full closeout and evidence
+  boundaries are in docs/SECURITY.md, "AA-03 — Santa Ana Geographic Analytics closeout".
+- Backend commit `a67a5a7e2b4280f8929024cf95f638d23c575343` is on GitHub `main`;
+  hosted migration `20260923035653_aa03_geographic_analytics` was applied once to
+  `uzbntxxwayqfkusyhodl`. The only new table is the private publication cache;
+  no business table, column, or relationship changed.
+- Local rollback and hosted SQL RPC/cache/denial evidence passed. HTTP/PostgREST
+  role verification remains unproven and is deferred to AA-06 if safe existing
+  sessions are naturally available. Inactive-Admin hosted runtime, hosted
+  concurrent first publication, and real-midnight rollover remain unverified.
+- Next: AA-04 Searchable/Paginated Worker and Client Directories, beginning with
+  contract/preflight review before implementation. AA-07 separately governs
+  analytics documentation synchronization.
