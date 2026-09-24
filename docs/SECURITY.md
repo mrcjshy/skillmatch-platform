@@ -1997,21 +1997,23 @@ labeling them hosted or real-midnight passes. Native/Mobile UI proof is not
 part of this backend closeout.
 
 AA-03 needs no further implementation, schema work, fixtures, test reruns,
-cache reset, or hosted mutation at this closeout. Proceed only to AA-04
-Searchable/Paginated Worker and Client Directories, with its contract and
-preflight reviewed before implementation. AA-07 remains the separate
-analytics documentation synchronization gate; no Second Brain or manuscript
+cache reset, or hosted mutation at this closeout. At the AA-03 closeout, the
+next step was AA-04 Searchable/Paginated Worker and Client Directories, with
+its contract and preflight reviewed before implementation. AA-07 remains the
+separate analytics documentation synchronization gate; no Second Brain or manuscript
 sync is recorded here.
 
-### AA-04 — Administrator Worker and Client directory boundary — local implementation
+### AA-04 — Administrator Worker and Client directory boundary — closeout
 
 The `20260923064708_aa04_admin_directories.sql` migration adds only
 `get_admin_worker_directory` and `get_admin_client_directory`; it changes no
-table, column, relationship, or direct table grant. Both are postgres-owned,
+business or infrastructure table, existing business column, relationship, or
+direct table grant. Both are postgres-owned,
 `STABLE` `SECURITY DEFINER` functions with empty `search_path`, explicit
 `auth.uid()` plus `private.is_admin()` checks before argument validation, and
-EXECUTE granted only to `authenticated` among application roles. Signed-out,
-Worker, Client, and inactive Administrator callers receive `42501`.
+EXECUTE granted only to `authenticated` among application roles. The function
+gate is designed to return `42501` to signed-out, Worker, Client, and inactive
+Administrator callers; the hosted runtime cases actually exercised are below.
 
 Each function returns one row containing matching `total_count`, requested
 `page` and `page_size`, and a JSON array of only the approved role's summary
@@ -2087,11 +2089,87 @@ bit-for-bit restoration. The executed harness is
 `%TEMP%\skillmatch-aa04-local-rehearsal-20260923-152334-bd6194cf\harness-amended.sql`
 (SHA-256 `AC847BB275F6382B369C130B0924D9858C3CB8811938FD44774A4020B7B2DA03`).
 
-The corrected AA-04 functions were **not persistently installed**; the prior
-local definitions remain. No hosted installation/verification, HTTP proof,
-native runtime, standalone APK, or physical-device proof is claimed. Separate
-offset-page requests have no stable-snapshot guarantee. AA-04 remains open
-overall, and AA-07 Second Brain synchronization remains pending.
+The corrected local rehearsal did **not** persistently replace the prior local
+definitions; its transaction rolled back. The unchanged corrected production
+migration was subsequently installed once on the hosted project. The local
+sequence advance above is not hosted evidence or a full-instance rollback.
+
+**Hosted application and catalog verification (2026-09-23).** The target was
+`uzbntxxwayqfkusyhodl` / `livelihood-matching-platform`, confirmed against
+the linked project. Supabase CLI 2.117.0 was run through `npx --no-install`;
+both preview and application used `--linked --skip-vault`. The dry-run preview
+selected only AA-04. One application attempt ran from 09:18:14.975 to
+09:18:32.653 UTC and exited 0. Migration history advanced from 35 to 36 rows
+with exactly one AA-04 entry. Its 10 recorded statements matched the unchanged
+production migration in order. The preceding 35 version/name pairs matched
+the immediate pre-application baseline; their statement contents had not been
+captured before deployment, so full-row statement-content immutability across
+the deployment remains unproven.
+
+Post-installation read-only catalog inspection found exactly
+`public.get_admin_worker_directory(text, integer, integer)` and
+`public.get_admin_client_directory(text, integer, integer)`, with no overloads.
+Their stored bodies, arguments/defaults, ownership,
+`STABLE`/`SECURITY DEFINER`/empty-`search_path` properties, comments, and
+effective application EXECUTE privileges matching the migration. Only
+`authenticated` had effective application-role EXECUTE; `anon` and
+`service_role` did not. The protected schema/security fingerprints matched
+within their recorded scopes: the **13-public-table** fingerprint covered
+table metadata, 91 columns, 23 foreign keys, 29 RLS policies, and table ACLs;
+the separate **18-table public/private** inventory covered base-relation names
+and kinds. These are bounded catalog scopes, not an ERD revision or a total
+system table count. Relevant private Admin helper, AA-01/AA-03 functions,
+AA-03 cache, and six enabled event-trigger fingerprints also matched. The
+application record is `%TEMP%\skillmatch-aa04-hosted-application-20260923-091700.md`.
+CLI bookkeeping outside the inspected scope was not inventoried.
+
+**Hosted SQL-claims runtime (2026-09-23).** A single explicit repeatable-read,
+read-only transaction passed **271/271 assertions across 51 directory
+invocations** and ended with `ROLLBACK`. Active Admin cases verified the
+one-row response contract, exact role-specific fields, account-role separation,
+ordering, counts, missing-profile `LEFT JOIN` semantics, trimmed case-insensitive
+name search, literal search characters within the observed comparisons,
+pagination, and argument bounds. Worker, Client, and signed-out claims returned
+`42501` with valid and invalid arguments, establishing the function's
+authorization-before-validation order; the signed-out case used an
+`authenticated` database role with no subject, not an HTTP anonymous session.
+Authorized invalid arguments returned `22023`. The run observed **7 Workers,
+5 Clients, and 3 Workers without profiles**; these are snapshot observations,
+not permanent counts. No fixtures, account changes, or production-function
+changes were made. The accepted report and inspected raw harness/result are
+`%TEMP%\skillmatch-aa04-hosted-runtime-20260923.md`, `.sql`, and `.json`.
+Inactive-Admin hosted runtime was not verified.
+
+**Native development-client runtime (2026-09-23).** The existing debuggable
+`com.mrcjshy.skillmatch` version 1.0.0/code 1 ran on
+`SkillMatch_Admin_API_36` / `emulator-5558` with ADB 5038 and Metro 8081. A
+fresh Android bundle was served from the accepted Mobile checkout
+`816e3d8224dc57ca203852d1c9bd4955355d7e69`; the loaded-source project
+provenance was recorded, but no independent in-memory bundle hash was taken.
+An existing Admin session was used without collecting credentials. The Worker
+screen showed 7 results, including 3 `No profile` rows without fabricated
+verification or availability labels. The Client screen showed 5 results and
+no Worker-profile fields. Both screens passed visible-name search, genuine
+no-results, Clear, and return navigation. Previous/Next were disabled on page
+1 of 1. No crash or authorization error was observed during these passes.
+An existing require-cycle warning and package-update notices were recorded;
+no refactor or upgrade was performed. Protected Client/Worker devices were
+untouched. The consolidated report and private identity-bearing evidence are
+outside Git at `%TEMP%\skillmatch-aa04-native-run-20260923-180746\` (report:
+`AA-04-native-runtime-closeout.md`); screenshots, UI dumps, and raw user data
+are not published here. An earlier runtime-unavailable STOP remains separately
+recorded at `%TEMP%\skillmatch-aa04-native-20260923-173756\report.txt`.
+
+**Retained closeout limits.** Native multi-page navigation, forced error/race
+states, and other unobserved states are not PASS. This development-client run
+does not prove release-APK or physical-device behavior. No separate
+HTTP/PostgREST role matrix was run; native network use does not establish that
+matrix. Separate offset-page requests have no stable-snapshot guarantee. The
+accepted LOCAL GraphQL sequence advance from `5111/true` to `5130/true` is
+neither hosted evidence nor proof of a full-instance rollback. No authoritative
+Second Brain or manuscript synchronization occurred; AA-07 remains the
+authoritative synchronization gate. AA-04 is **COMPLETE with retained evidence
+limitations** within the scopes above.
 
 Future gap template:
 

@@ -229,6 +229,25 @@ Snapshot date: 2026-09-23. Updated only at phase boundaries.
   role verification remains unproven and is deferred to AA-06 if safe existing
   sessions are naturally available. Inactive-Admin hosted runtime, hosted
   concurrent first publication, and real-midnight rollover remain unverified.
-- Next: AA-04 Searchable/Paginated Worker and Client Directories, beginning with
-  contract/preflight review before implementation. AA-07 separately governs
-  analytics documentation synchronization.
+- Historical next step at AA-03 closeout: AA-04 Searchable/Paginated Worker and
+  Client Directories. Its later closeout is recorded below. AA-07 separately
+  governs analytics documentation synchronization.
+
+### AA-04 — Administrator Worker and Client directories (September 23 evidence)
+
+- Status: **COMPLETE with retained evidence limitations**. Separate protected
+  Worker and Client directory RPCs and native Admin screens are implemented.
+  Published Web implementation commit: `82984c7fdc9e0ef5af568d350db94a7807e91d6f`;
+  Mobile implementation commit: `816e3d8224dc57ca203852d1c9bd4955355d7e69`.
+- Hosted migration `20260923064708_aa04_admin_directories` was installed once.
+  Corrected local SQL passed 46/46; hosted SQL-claims passed 271/271 assertions
+  across 51 directory calls. Native Admin checks passed within the recorded
+  observable scope.
+- AA-04 added zero business or infrastructure tables and changed no existing
+  business column or relationship. Detailed evidence and retained limitations
+  are in docs/SECURITY.md, “AA-04 — Administrator Worker and Client directory
+  boundary — closeout.”
+- Next roadmap item: AA-05 read-only user details, pending its separately
+  approved contract/execution gate. AA-06 retains integrated verification and
+  deferred HTTP role checks. AA-07 remains authoritative Second Brain
+  synchronization.
