@@ -172,7 +172,7 @@ agents propose, Josh decides.
 
 ## STATUS
 
-Snapshot date: 2026-09-23. Updated only at phase boundaries.
+Snapshot date: 2026-09-24. Updated only at phase boundaries.
 
 ### Phase 0 — historical record (snapshot 2026-08-22)
 
@@ -247,28 +247,32 @@ Snapshot date: 2026-09-23. Updated only at phase boundaries.
   business column or relationship. Detailed evidence and retained limitations
   are in docs/SECURITY.md, “AA-04 — Administrator Worker and Client directory
   boundary — closeout.”
-- Next roadmap item: AA-05 read-only user details, pending its separately
-  approved contract/execution gate. AA-06 retains integrated verification and
-  deferred HTTP role checks. AA-07 remains authoritative Second Brain
+- At AA-04 closeout, AA-05 read-only user details was the next roadmap item;
+  its later closeout is recorded below. AA-06 retains integrated verification
+  and deferred HTTP role checks. AA-07 remains authoritative Second Brain
   synchronization.
 
-### AA-05 — read-only Administrator user details (local SQL checkpoint)
+### AA-05 — read-only Administrator user details (2026-09-24 closeout)
 
-- Status: **implemented and locally SQL-verified; hosted installation and native
-  runtime pending; not complete**. One active-Admin-only Worker/Client detail
-  RPC, one shared native detail screen, and focused SQL test source are prepared.
-  No business or infrastructure table, business column, relationship, or RLS
-  grant changed.
-- The exact migration and SQL test ran once in a bounded transaction against
-  the existing local PostgreSQL 17.6 database: function catalog check and 30/30
-  SQL assertions passed; the terminal rollback removed the function and fixtures.
-  Checked protected baselines matched. The local GraphQL schema-version sequence
-  advanced from 5144/true to 5157/true; this permitted difference is not an
-  exact trigger-call count. See docs/SECURITY.md for the scoped evidence.
-- Focused Mobile helper tests passed 6/6; Mobile TypeScript and targeted ESLint
-  over the five AA-05 source/test files passed. Their raw output was unavailable
-  during source review, so these results were carried forward. No hosted, HTTP,
-  or native runtime proof exists; directory Back-state preservation remains
-  pending native verification.
-- At the source and local rehearsal checkpoints, no AA-05 commit, push, or
-  persistent installation had occurred. AA-06 and AA-07 retain separate scopes.
+- Status: **COMPLETE with retained evidence limitations**. Web implementation
+  commit `54ba301e304ce85e231dcdb763087fd517ed7207` and Mobile implementation
+  commit `a9ad81cef31a9ab52ab0da759b6b5ba1da036722` are published. One
+  active-Admin-only, read-only Worker/Client detail RPC and one shared protected
+  native detail screen were added. No business or infrastructure table, business
+  column, relationship, table grant, or RLS policy changed.
+- Local rollback rehearsal passed 30/30 SQL assertions. Its checked application
+  state returned to baseline, while the permitted local GraphQL sequence
+  advanced from 5144/true to 5157/true; this is not a full-instance rollback
+  claim. Focused Mobile helper tests passed 6/6; TypeScript, targeted ESLint,
+  and diff checks passed as carried-forward source-gate evidence.
+- Hosted migration `20260924081642_aa05_admin_user_detail` was applied once to
+  `uzbntxxwayqfkusyhodl`. History advanced 36 to 37 rows; the installed
+  function/body/ACL passed catalog verification. Hosted read-only SQL-claims
+  runtime passed 41/41 assertions. Android development-client runtime passed
+  within observed Worker, Client, missing-profile, and Back-navigation paths.
+- Inactive Worker/Client/Admin cases, AA-05 HTTP role checks, non-Admin native
+  direct-route denial, error/race states, detail loading, multi-page and precise
+  scroll restoration, release APK, and physical-device behavior remain
+  unverified. See docs/SECURITY.md, “AA-05 — read-only Administrator
+  Worker/Client details — closeout,” for exact evidence boundaries. AA-06 and
+  AA-07 retain separate scopes.

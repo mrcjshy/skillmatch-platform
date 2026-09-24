@@ -2171,7 +2171,7 @@ Second Brain or manuscript synchronization occurred; AA-07 remains the
 authoritative synchronization gate. AA-04 is **COMPLETE with retained evidence
 limitations** within the scopes above.
 
-### AA-05 — read-only Administrator Worker/Client details — local SQL checkpoint
+### AA-05 — read-only Administrator Worker/Client details — closeout
 
 The approved AA-05 source adds only
 `public.get_admin_user_detail(p_user_id text, p_expected_role text) RETURNS jsonb`
@@ -2212,7 +2212,7 @@ identity, primitive/null values, missing-profile semantics, and safe
 nonnegative counts. SQL NULL is an unavailable target, distinct from a
 malformed response. Directory rows push one Admin detail route and ordinary
 Back returns through the existing stack; no explicit directory-state storage
-was added. Back-state preservation remains pending native verification. The
+was added. Back-state preservation was pending at the source checkpoint. The
 screen uses the current Admin/session identity plus target,
 role, and reload generation to mask stale data, and ignores completions after
 blur. It presents loading, success, unavailable, access-denied, and retryable
@@ -2254,17 +2254,108 @@ is not an exact trigger-call count; concurrent activity was not excluded.
 These checks do not establish full-instance or bit-for-bit restoration.
 No persistent local AA-05 installation occurred.
 
-**Evidence boundary.** The SQL execution is local evidence only, not hosted,
-HTTP, or native runtime proof. Focused Mobile helper tests passed **6/6**;
+**Source and local evidence boundary (historical checkpoint).** The SQL
+execution is local evidence only. Focused Mobile helper tests passed **6/6**;
 `npx --no-install tsc --noEmit`, targeted no-autofix ESLint over exactly five
 AA-05 Mobile files, and `git diff --check` in both repositories passed during
 the source gate. Their raw command output was unavailable during the focused
 source review, so those results were carried forward and not rerun here.
-Back-state preservation remains pending native verification. At the source
-and local rehearsal checkpoints, no AA-05 commit, push, hosted operation, or
-Second Brain/manuscript synchronization had occurred. AA-05 remains
-**implemented and locally SQL-verified; hosted installation and native runtime
-pending**, not complete.
+At the source and local rehearsal checkpoints, no AA-05 commit, push, hosted
+operation, or Second Brain/manuscript synchronization had occurred. The later
+hosted and native evidence below supersedes only those checkpoint statuses.
+
+**Published implementation and hosted preflight.** Source/static review
+passed without a substantive correction. Web implementation commit
+`54ba301e304ce85e231dcdb763087fd517ed7207` and Mobile implementation
+commit `a9ad81cef31a9ab52ab0da759b6b5ba1da036722` were published and their
+live GitHub main refs verified. The hosted target was the already-linked
+`uzbntxxwayqfkusyhodl` / `livelihood-matching-platform`. Bounded read-only
+preflight confirmed no existing AA-05 function or history row, compatible
+prerequisite tables/relationships and Admin helper, and the expected enabled
+DDL event triggers. The accepted migration SHA-256 remained
+`73BCECCDDD213121CC33E700628D30ABFC5F8C66A88BCA87FAF16403A616E0D7`.
+Supabase CLI 2.117.0 dry-run selected only
+`20260924081642_aa05_admin_user_detail.sql`, with no seeds or roles. Baseline:
+`%TEMP%\skillmatch-aa05-hosted-preflight-baseline-20260924-005028.md`.
+
+**Hosted installation and catalog — 2026-09-24.** One
+`npx --no-install supabase db push --linked --skip-vault` application attempt
+ran from 01:00:28.5696499 to 01:00:36.0454661 UTC and exited 0. Hosted
+migration history advanced from 36 to 37 rows with exactly one AA-05
+version/name entry. Its eight recorded statements matched the unchanged
+production migration in order after whitespace normalization; the preceding
+36 history rows matched the immediate pre-application snapshot. Exactly one
+`public.get_admin_user_detail(text,text)` overload was installed. Its JSONB
+return type, non-STRICT/STABLE/SECURITY DEFINER mode, postgres owner, empty
+`search_path`, comment, stored body, authorization-before-validation order,
+role-specific projection, and effective application EXECUTE matched the
+approved contract: `authenticated` allowed; `anon`, `service_role`, and
+`PUBLIC` denied. Checked existing function, table/column/FK, RLS/grant,
+relation-inventory, and event-trigger metadata matched the immediate
+pre-application snapshot. No AA-05 business or infrastructure table, business
+column, relationship, table grant, or RLS policy was added or changed. This
+was bounded catalog/history evidence, not a full-instance comparison or
+function-runtime invocation.
+
+**Hosted SQL-claims runtime — 2026-09-24.** The persistently installed RPC
+passed **41/41 executed assertions** in one REPEATABLE READ READ ONLY
+transaction ending with `ROLLBACK`. Under an active Admin claim, Worker and
+Client details matched direct retained-row reads and exact role-specific JSON
+key sets. A naturally retained Worker without a profile returned a non-NULL
+detail with absent profile metadata and an independently correct completed
+booking count. Nonexistent and wrong-role targets returned SQL NULL. Worker,
+Client, and no-sub callers received `42501` for valid inputs; unauthorized
+malformed/invalid inputs also received `42501`, confirming authorization
+before validation. Authorized invalid inputs received `22023`; canonical
+uppercase-hex UUID text was accepted. Returned objects passed the exact-key
+privacy and nonnegative retained-count checks. The no-sub case used an
+`authenticated` database role with no subject, **not** an HTTP anonymous
+request. A later read-only check still found 37 history rows, one AA-05
+entry, and one function overload. Sanitized harness, result, and report:
+`%TEMP%\skillmatch-aa05-hosted-runtime-20260924.sql`, `.json`, and `.md`.
+No fixture, account, schema, or migration-history mutation was made.
+
+**Native Android development-client runtime — 2026-09-24.** The published
+Mobile checkout was bundled for the existing debuggable Admin development
+client on `SkillMatch_Admin_API_36` / `emulator-5558`. An existing active
+Admin session navigated from each directory row to the shared protected
+`User Details` screen. The selected Worker showed the correct Name, Active
+status, Joined date, profile, verification, and availability; **3 completed
+bookings** matched a bounded hosted read-only retained-row count. The selected
+Client showed Name, Active status, Joined date, and **13 jobs posted**,
+matching all retained rows for that Client across four observed stored
+statuses; no Worker-only fields or Job rows appeared. A naturally retained
+missing-profile Worker loaded with `No profile` for profile, verification,
+and availability and **0 completed bookings**, matching the hosted count.
+No raw UUID, privacy-excluded field, or account-management action appeared
+in the captured detail screens or visible UI hierarchy. Ordinary Back
+returned to both originating directories with search text, one-result filter,
+and Page 1 of 1 preserved. The route is in the protected Admin stack;
+runtime navigation used that route under the active Admin session.
+
+Private native report:
+`%TEMP%\skillmatch-aa05-native-20260924-091102\AA-05-native-runtime-report.md`.
+Its 23 screenshot/UI-hierarchy pairs remain outside both repositories and
+contain retained identities; they are not published here. No independent
+in-memory bundle hash was recorded. Normal app use may have produced
+auth/session/cache bookkeeping, while no intentional hosted business-data,
+account, schema/history, source, or Git mutation occurred in this gate.
+
+**Retained AA-05 evidence limits.** No inactive Worker, inactive Client, or
+inactive Administrator was naturally available for runtime verification.
+There is no AA-05 HTTP/PostgREST anonymous or role matrix; the SQL no-sub
+test is not HTTP anonymous proof. No native non-Admin direct-route bypass
+attempt was made. Native unavailable, access-denied, retryable-error,
+stale-request/race, and detail-specific loading states were not observed;
+Client directory loading followed by success was observed. Multi-page
+directory restoration and precise scroll restoration were not observable
+with the retained single-page data. The Android development-client run
+does not prove release APK or physical-device behavior. The local GraphQL
+sequence advance above is an accepted nonrollback local infrastructure
+effect, not hosted evidence or bit-for-bit/full-instance rollback. No
+authoritative Second Brain or manuscript synchronization was performed;
+AA-07 retains its separate scope. Within these boundaries, AA-05 is
+**COMPLETE WITH RETAINED EVIDENCE LIMITATIONS**.
 
 Future gap template:
 
