@@ -276,3 +276,34 @@ Snapshot date: 2026-09-24. Updated only at phase boundaries.
   unverified. See docs/SECURITY.md, “AA-05 — read-only Administrator
   Worker/Client details — closeout,” for exact evidence boundaries. AA-06 and
   AA-07 retain separate scopes.
+
+### AA-06 — integrated Admin verification (2026-09-24 closeout)
+
+- Status: **COMPLETE WITH RETAINED EVIDENCE LIMITATIONS**. The detailed HTTP,
+  native, static, integrity, and retained-limit record is in docs/SECURITY.md,
+  “AA-06 — integrated Admin verification — closeout.” Web entry commit
+  `2e34ea390a88acd314ffdd2d9f34223d16c77bf7`, Mobile entry commit
+  `a9ad81cef31a9ab52ab0da759b6b5ba1da036722`, and hosted target
+  `uzbntxxwayqfkusyhodl` matched the accepted baselines.
+- Real PostgREST requests proved active-Admin success for AA-01 aggregate
+  analytics, both AA-04 directories, and AA-05 Worker/Client details. Worker,
+  Client, and no-user-bearer anonymous requests were denied with `42501` on
+  all five Admin RPCs. Authorized invalid arguments returned `22023`;
+  unauthorized malformed AA-05 arguments remained authorization-first.
+- AA-03 Admin HTTP success was deliberately unverified: the exact 2026-09-24
+  Manila-date publication was absent, so a successful call could change the
+  private publication cache. Its Worker, Client, and anonymous HTTP denials
+  passed; the cache count and whole-row hash stayed unchanged.
+- Focused Mobile Admin tests passed 40/40 across three files; TypeScript,
+  targeted no-autofix ESLint, and diff checks passed. One existing-session
+  Android development-client smoke covered dashboard analytics, both
+  directories, both details, and ordinary Back without a crash. Migration
+  history stayed at 37 rows with AA-05 installed once; checked schema,
+  function, cache, and business-count baselines stayed unchanged. The AA-06
+  verification run performed no account, business-data, schema/history,
+  source, or Git mutation; ordinary Worker/Client auth/session bookkeeping
+  occurred.
+- Current roadmap: AA-01 **COMPLETE**; AA-02 **COMPLETE**; AA-03 **COMPLETE
+  WITH RETAINED LIMITATIONS**; AA-04, AA-05, and AA-06 **COMPLETE WITH RETAINED
+  EVIDENCE LIMITATIONS**. **AA-07 is next** for authoritative Second Brain
+  synchronization under its own scope. No manuscript revision occurred here.

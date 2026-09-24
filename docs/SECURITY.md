@@ -2357,6 +2357,137 @@ authoritative Second Brain or manuscript synchronization was performed;
 AA-07 retains its separate scope. Within these boundaries, AA-05 is
 **COMPLETE WITH RETAINED EVIDENCE LIMITATIONS**.
 
+### AA-06 — integrated Admin verification — closeout
+
+**Status: COMPLETE WITH RETAINED EVIDENCE LIMITATIONS (2026-09-24).** This was
+a verification gate for the already published AA-01 through AA-05 Admin
+features. No implementation, migration, package, Mobile source, or manuscript
+change was made. Web entry HEAD, `origin/main`, and live GitHub `main` matched
+`2e34ea390a88acd314ffdd2d9f34223d16c77bf7`; Mobile matched
+`a9ad81cef31a9ab52ab0da759b6b5ba1da036722`. Both repositories were
+ahead/behind `0/0` with clean tracked trees and indexes. Existing untracked
+Web `.agents/` and `.codex/` and Mobile `evidence/` were preserved. The
+linked hosted target was `uzbntxxwayqfkusyhodl`. All five expected Admin
+RPC signatures were present; migration history had 37 rows with exactly one
+AA-05 entry. Earlier AA-01 through AA-05 statements that HTTP checks were
+pending describe those historical closeout points; the observed HTTP cases
+below supply the later AA-06 evidence.
+
+**Session and HTTP method.** Naturally retained active-Admin, Worker, and
+Client Android sessions were used. Worker and Client sessions refreshed through
+ordinary app startup; no account/password reset or fixture was made. Bearer
+tokens remained transient in process memory and were neither printed nor
+saved in evidence or repositories. Anonymous proof used real PostgREST HTTP
+requests with a publishable API key and **no user Authorization bearer**.
+The table reports each tested invocation and marks the intentionally omitted
+AA-03 Admin call. `—` means a successful response without a database error
+code for tested success rows. Every denied/error response was an error object
+with no application analytics, directory, or detail data.
+
+| RPC | Caller / case | HTTP | Code | Observed result |
+| --- | --- | ---: | --- | --- |
+| `get_admin_analytics_summary` | Admin | 200 | — | One aggregate row; exact contract keys |
+| same | Worker | 403 | `42501` | Denied |
+| same | Client | 403 | `42501` | Denied |
+| same | anonymous | 401 | `42501` | Denied |
+| `get_admin_geographic_analytics` | Admin | — | — | Not invoked; current publication absent |
+| same | Worker | 403 | `42501` | Denied |
+| same | Client | 403 | `42501` | Denied |
+| same | anonymous | 401 | `42501` | Denied |
+| `get_admin_worker_directory` | Admin | 200 | — | One exact `total_count`, `page`, `page_size`, `items` wrapper; 7 Workers, Worker-only projection |
+| same | Worker | 403 | `42501` | Denied |
+| same | Client | 403 | `42501` | Denied |
+| same | anonymous | 401 | `42501` | Denied |
+| same | Admin, invalid page | 400 | `22023` | Validation error |
+| `get_admin_client_directory` | Admin | 200 | — | One exact wrapper; 5 Clients, Client-only projection |
+| same | Worker | 403 | `42501` | Denied |
+| same | Client | 403 | `42501` | Denied |
+| same | anonymous | 401 | `42501` | Denied |
+| `get_admin_user_detail` | Admin, existing Worker | 200 | — | Exact Worker keys; requested identity matched |
+| same | Admin, existing Client | 200 | — | Exact Client keys; requested identity matched |
+| same | Admin, nonexistent canonical UUID | 200 | — | JSON `null` |
+| same | Admin, wrong expected role | 200 | — | Identical JSON `null` |
+| same | Admin, malformed UUID | 400 | `22023` | Validation error |
+| same | Worker, valid target | 403 | `42501` | Denied |
+| same | Client, valid target | 403 | `42501` | Denied |
+| same | anonymous, valid-format target | 401 | `42501` | Denied |
+| same | Worker, malformed UUID | 403 | `42501` | Authorization before validation |
+| same | Client, malformed UUID | 403 | `42501` | Authorization before validation |
+
+AA-04 and AA-05 successful HTTP payloads had only the approved role-specific
+keys. They exposed no email, phone, exact address/location, identity-document
+information, credentials, messages, payment/provider identifiers, report
+narratives, or unrestricted Booking/Job records. AA-05 `user_id` is required
+in its approved HTTP response but remained hidden in the visible native UI.
+The wrong-role and nonexistent AA-05 targets were indistinguishable as JSON
+`null` at the application-data level. Worker/Client malformed-input denials
+confirmed authorization-before-validation through HTTP.
+
+**AA-03 publication safety.** On the Asia/Manila date 2026-09-24, no exact
+`aggregation_version = aa03-geo-v1` and
+`grid_version = sa-pateros-626f7138-g005-v1` publication existed. The
+`VOLATILE` Admin RPC could insert today's private publication and remove
+out-of-retention rows, so AA-06 did not invoke its Admin success path. Record
+exactly: **AA-03 Admin HTTP success — UNVERIFIED: current-date publication
+absent; invoking the active Admin success path would mutate the private
+publication cache.** Worker, Client, and anonymous denial calls returned the
+codes above. Cache row count remained 1 and its whole-row MD5 stayed
+`c05ef9dd282a495049acd6787309eae2`; no AA-06 cache mutation occurred.
+Today's frozen-publication HTTP equality is therefore unverified, not failed.
+
+**Focused Mobile static regression.**
+`npx --no-install vitest run src/lib/admin-analytics.test.ts src/lib/admin-directories.test.ts src/lib/admin-user-detail.test.ts`
+passed **40/40 tests in three files**. `npx --no-install tsc --noEmit` and
+targeted no-autofix ESLint over the three Admin helper/test pairs,
+`src/components/admin-analytics-dashboard.tsx`,
+`src/components/admin-directory.tsx`, and
+`src/app/(admin)/admin/user-detail.tsx` passed. `git diff --check` and
+`git diff --cached --check` passed in both repositories. No dependency was
+upgraded.
+
+**One bounded native integrated smoke.** The existing Android development
+client and active Admin session followed dashboard analytics → Worker
+directory → Worker detail → Back → Client directory → Client detail → Back.
+The dashboard rendered 7 Workers, 5 Clients, 15 Jobs, and 10 Bookings,
+matching the bounded hosted counts. Both directories and role-specific
+details loaded; ordinary Back worked; no crash, visible raw UUID, or
+account-management control appeared. This inspected route did not establish
+release-APK or physical-device behavior. No independent in-memory native
+bundle hash was captured. Private identity-bearing screenshots stay outside
+the repositories.
+
+**Post-run integrity and mutation boundary.** Migration history remained 37
+rows, with one AA-05 entry. The five inspected Admin RPC definitions, owners,
+ACLs, and volatility matched preflight. Checked relation/ACL and column
+fingerprints stayed unchanged. The bounded business counts matched before and
+after: `users` 14, `worker_profiles` 4, `job_postings` 15, `bookings` 10,
+`reports` 2, `messages` 9, `ratings` 3. Equal counts do not exclude an
+unrelated concurrent same-count row update and are not a whole-database
+cryptographic immutability proof. The AA-03 cache count/hash stayed unchanged.
+Both repositories retained their entry SHAs and clean tracked state before
+this documentation closeout. The AA-06 verification run performed no
+intentional account, business-data, schema, migration-history, source, Git,
+or AA-03 cache mutation. Ordinary Worker/Client auth/session bookkeeping
+occurred as existing sessions refreshed; that is separate from business-data
+mutation.
+
+**Retained AA-06 limits.** The absent current-date AA-03 publication prevented
+Admin HTTP success and frozen-publication HTTP equality verification for
+2026-09-24. Inactive-account cases were not manufactured. Native non-Admin
+direct-route denial, forced error states, stale/race responses, and
+detail-specific loading/error cases were not rerun. Multi-page directory and
+precise scroll restoration were not naturally observable. Release APK,
+physical-device behavior, and real-midnight AA-03 rollover remain unverified.
+This was a bounded integrated Admin smoke, not a full continuous R6 rerun;
+the native in-memory bundle was not independently hashed. These remain
+evidence limits rather than reopened AA-01 through AA-05 implementation work.
+
+Sanitized report: `%TEMP%\skillmatch-aa06-verification-20260924.md`.
+Token-free HTTP harnesses are beside it in `%TEMP%`; identity-bearing native
+screenshots remain private outside Git. AA-07 authoritative Second Brain
+synchronization is next under separate authorization. No manuscript revision
+or authoritative synchronization occurred in AA-06.
+
 Future gap template:
 
 ```
