@@ -2171,6 +2171,101 @@ Second Brain or manuscript synchronization occurred; AA-07 remains the
 authoritative synchronization gate. AA-04 is **COMPLETE with retained evidence
 limitations** within the scopes above.
 
+### AA-05 — read-only Administrator Worker/Client details — local SQL checkpoint
+
+The approved AA-05 source adds only
+`public.get_admin_user_detail(p_user_id text, p_expected_role text) RETURNS jsonb`
+and a shared protected native detail route reached from the existing Worker
+or Client directory row. It creates no table, column, relationship, cache,
+table grant, RLS policy, or management action; AA-04's two directory RPCs are
+unchanged. Inactive Worker/Client accounts remain valid targets, as do Workers
+without profiles. The native screen keeps `user_id` internally and never
+displays it.
+
+The function is postgres-owned, `STABLE SECURITY DEFINER`, non-`STRICT`, and
+uses empty `search_path` with schema-qualified reads. It checks `auth.uid()`
+and the active-Administrator `private.is_admin()` helper **before** role or
+UUID-text validation, returning `42501` for unauthorized calls even with
+invalid or NULL arguments. Only `worker` and `client` roles and exactly
+8-4-4-4-12 ASCII hexadecimal UUID text are accepted; invalid arguments
+return `22023`. A nonexistent or wrong-role target yields SQL NULL. EXECUTE
+is explicitly revoked from `PUBLIC`, `anon`, `authenticated`, and
+`service_role`, then granted to `authenticated` only among application roles.
+No direct table access is widened.
+
+Both role-specific JSON objects contain exactly `user_id`, `full_name`,
+`is_active` (from `users.is_active IS TRUE`), and nullable `created_at`.
+Worker output additionally contains `has_profile`, nullable `is_verified`,
+nullable `availability_status`, and `completed_bookings_count`; the optional
+unique profile is left-joined, so missing profile metadata remains NULL.
+The Worker count is retained `bookings` rows for that user with
+`status = 'completed'`, independent of profile existence. Client output
+additionally contains only `posted_jobs_count`, counting retained
+`job_postings` rows for that Client across every stored status, including
+NULL. Both counts are nonnegative, have no date filter, and return no
+underlying Booking or Job records. Neither object returns contact details,
+locations, identity documents, skills, ratings, strikes, messages, payment
+identifiers, report narratives, or credentials.
+
+Mobile strictly parses the exact role-specific keys, canonical matching
+identity, primitive/null values, missing-profile semantics, and safe
+nonnegative counts. SQL NULL is an unavailable target, distinct from a
+malformed response. Directory rows push one Admin detail route and ordinary
+Back returns through the existing stack; no explicit directory-state storage
+was added. Back-state preservation remains pending native verification. The
+screen uses the current Admin/session identity plus target,
+role, and reload generation to mask stale data, and ignores completions after
+blur. It presents loading, success, unavailable, access-denied, and retryable
+error states without account-management controls.
+
+**Local SQL rehearsal — 2026-09-24.** The existing
+`supabase_db_skillmatch-web` container was already running and healthy; no
+stack start, rebuild, or reset was needed. Its repository mapping was local
+port 54322 to container port 5432, database `postgres`, PostgreSQL 17.6.
+Read-only preflight found no `get_admin_user_detail` function or overload and
+no local `20260924081642` migration-history entry. Eight enabled DDL event
+triggers were inspected. The applicable GraphQL trigger invokes `nextval` on
+`graphql.seq_schema_version`; the schema-notification effect is transactional.
+No other rollback-external effect was identified within inspected paths.
+
+The exact migration SHA-256 was
+`73BCECCDDD213121CC33E700628D30ABFC5F8C66A88BCA87FAF16403A616E0D7`;
+the focused SQL test SHA-256 was
+`C723D32FF2235A847F4C59AAF931F74D53F109400224B494BE8B110B1C70271F`.
+The temporary `%TEMP%\skillmatch-aa05-local-harness-20260924-003608.sql`
+(SHA-256 `3AEA8D28281D33BCAA2640DBC4133B38207C4E1812E9A44A0504CAA8F29BC3F0`)
+preserved the test's `BEGIN` and terminal `ABORT`, inserted transaction-local
+lock and statement timeouts of 3s and 30s, embedded the unchanged migration,
+then added a bounded catalog check before the unchanged test body. One actual
+database-connected `psql -X` execution used `ON_ERROR_STOP=on` and
+`ON_ERROR_ROLLBACK=off`; exit code was 0. The function catalog check and
+**30/30 SQL assertions passed**. The terminal `ABORT` produced `ROLLBACK`.
+An earlier Python launcher quoting error occurred before any database
+connection and was not a SQL execution attempt.
+
+Post-rollback, `get_admin_user_detail` and the AA-05 migration-history entry
+were absent. The five fixture tables and AA-05 fixture markers returned to
+baseline zero. Checked function definitions/security metadata, table grants
+and RLS metadata, eight event-trigger fingerprints, and the 32-row local
+migration history matched their pre-run baselines. The
+`graphql.seq_schema_version` sequence retained its identity, configuration,
+owner, and ACL, but changed from `5144/true` to `5157/true`. The observed +13
+is not an exact trigger-call count; concurrent activity was not excluded.
+These checks do not establish full-instance or bit-for-bit restoration.
+No persistent local AA-05 installation occurred.
+
+**Evidence boundary.** The SQL execution is local evidence only, not hosted,
+HTTP, or native runtime proof. Focused Mobile helper tests passed **6/6**;
+`npx --no-install tsc --noEmit`, targeted no-autofix ESLint over exactly five
+AA-05 Mobile files, and `git diff --check` in both repositories passed during
+the source gate. Their raw command output was unavailable during the focused
+source review, so those results were carried forward and not rerun here.
+Back-state preservation remains pending native verification. At the source
+and local rehearsal checkpoints, no AA-05 commit, push, hosted operation, or
+Second Brain/manuscript synchronization had occurred. AA-05 remains
+**implemented and locally SQL-verified; hosted installation and native runtime
+pending**, not complete.
+
 Future gap template:
 
 ```

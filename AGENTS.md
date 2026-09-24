@@ -251,3 +251,24 @@ Snapshot date: 2026-09-23. Updated only at phase boundaries.
   approved contract/execution gate. AA-06 retains integrated verification and
   deferred HTTP role checks. AA-07 remains authoritative Second Brain
   synchronization.
+
+### AA-05 — read-only Administrator user details (local SQL checkpoint)
+
+- Status: **implemented and locally SQL-verified; hosted installation and native
+  runtime pending; not complete**. One active-Admin-only Worker/Client detail
+  RPC, one shared native detail screen, and focused SQL test source are prepared.
+  No business or infrastructure table, business column, relationship, or RLS
+  grant changed.
+- The exact migration and SQL test ran once in a bounded transaction against
+  the existing local PostgreSQL 17.6 database: function catalog check and 30/30
+  SQL assertions passed; the terminal rollback removed the function and fixtures.
+  Checked protected baselines matched. The local GraphQL schema-version sequence
+  advanced from 5144/true to 5157/true; this permitted difference is not an
+  exact trigger-call count. See docs/SECURITY.md for the scoped evidence.
+- Focused Mobile helper tests passed 6/6; Mobile TypeScript and targeted ESLint
+  over the five AA-05 source/test files passed. Their raw output was unavailable
+  during source review, so these results were carried forward. No hosted, HTTP,
+  or native runtime proof exists; directory Back-state preservation remains
+  pending native verification.
+- At the source and local rehearsal checkpoints, no AA-05 commit, push, or
+  persistent installation had occurred. AA-06 and AA-07 retain separate scopes.
