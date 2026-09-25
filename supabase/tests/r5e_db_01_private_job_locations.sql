@@ -659,7 +659,11 @@ BEGIN
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.jwt(client_own);
     SET LOCAL ROLE authenticated;
-    PERFORM public.cancel_my_booking(booking_cancel);
+    PERFORM public.cancel_my_booking(
+      booking_cancel,
+      'unable_to_continue',
+      NULL
+    );
     PERFORM pg_temp.clear_jwt();
   EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.clear_jwt();

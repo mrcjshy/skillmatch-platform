@@ -684,24 +684,56 @@ from `PUBLIC`, `anon`, `authenticated` and `service_role` and then granted to
 - atomic trusted notification emission in the same transaction
 - payment fields untouched
 
-### Cancellation boundary — `public.cancel_my_booking(uuid)`
+### Cancellation boundary — `public.cancel_my_booking(uuid,text,text)`
 
-Same security properties, ACL and lock order.
+V4 #19-BE1 replaces the UUID-only cancellation entry point with the reason-aware
+interface:
 
-- caller identity derived from `auth.uid()`
-- active Worker **or** active Client required, else `42501`
-- the caller must be the exact Booking participant — that Booking's `worker_id` or
-  `client_id`
-- the Booking must be `confirmed` and its Job `matched`
-- post-lock validation of the Booking/Job pair
-- terminal cancellation: the Job is set `cancelled` and is **never reopened**; no
-  rematching and no replacement Booking
-- atomic counterparty notification in the same transaction
-- payment fields untouched
+```sql
+cancel_my_booking(
+  p_booking_id uuid,
+  p_reason_code text,
+  p_reason_detail text DEFAULT NULL
+)
+```
 
-Implemented forward guard: **cancellation of an already-paid Booking fails closed**
-(`SM403`, raised only after participation is proven). No path can currently set
-`payment_status = 'paid'`, so this is defensive. **No refund system exists.**
+The old `public.cancel_my_booking(uuid)` signature is intentionally absent. It must not
+remain callable as a reason-metadata bypass. The effective function is postgres-owned,
+`SECURITY DEFINER`, `VOLATILE`, and `SET search_path = ''`. EXECUTE is available to
+`postgres` and `authenticated`; `anon` and `PUBLIC` are denied. Ordinary authenticated
+users retain no direct UPDATE authority over `public.bookings`.
+
+- caller identity and trusted `cancelled_by` are both derived server-side from
+  `auth.uid()`; no actor identifier is accepted from the caller
+- an active Worker or active Client is required, else `42501`, and the caller must be
+  the exact Booking participant — that Booking's `worker_id` or `client_id`
+- the Booking must be `confirmed`, its Job must be `matched`, and the function preserves
+  the fixed Booking-first / Job-second `FOR UPDATE` lock order
+- absent, non-participant, wrong-lifecycle, or inconsistent Booking/Job cases remain
+  collapsed to `SM409`
+- cancellation requires `payment_status = 'pending'`; a proven participant receives
+  `SM403` for a settled or otherwise non-pending payment state
+- reason validation occurs only after the existing caller authorization, locked
+  lifecycle/consistency checks, and payment check, so malformed reason input cannot
+  become a Booking-existence oracle
+- accepted reason codes are `schedule_conflict`, `unable_to_continue`, `location_issue`,
+  `payment_issue`, and `other`; detail is normalized and limited to 300 characters, and
+  `other` requires nonblank detail
+- a successful new cancellation records `cancellation_reason_code`,
+  `cancellation_reason_detail`, `cancelled_by`, and trusted database-time `cancelled_at`
+- historical cancelled rows may retain NULL reason, detail, actor, and cancellation time;
+  this all-NULL bundle preserves unfabricated legacy history and is not malformed data
+- cancellation remains terminal: the Booking and Job become `cancelled`, the Job is
+  never reopened, and no rematching or replacement Booking occurs
+- the counterparty receives the existing fixed `booking_cancelled` notification in the
+  same transaction; reason and free-text detail remain Booking-history metadata and are
+  not copied into the notification
+
+Cancellation metadata belongs to the Booking transaction and is exposed through the
+caller-scoped `list_my_worker_bookings()` and `list_my_client_bookings()` RPCs. It is not
+public Job data, matching data, rating data, strike data, automatic-suspension data, or
+disciplinary authority. V4 #19-BE1 extends the existing `bookings` entity and creates no
+new cancellation business table or ERD entity.
 
 ### Error and anti-oracle behaviour
 
