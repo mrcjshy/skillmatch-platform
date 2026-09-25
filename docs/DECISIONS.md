@@ -56,6 +56,29 @@ Effective status of D-001 from this amendment onward: LOCKED as amended. The ori
 11-table line above is retained for append-only provenance but is superseded by this
 amendment for application-table count.
 
+#### Clarification — V4 #16 trusted Admin report notifications (2026-09-25) — LOCKED
+
+V4 #16 supersedes only R3's historical “no report notifications” clause. Successful
+`submit_my_booking_report(uuid,text,text)` and `submit_my_app_issue(text)` executions
+emit the new stable type `report_submitted` once to every active Administrator selected
+server-side by `users.role = 'administrator' AND users.is_active = true`. Recipients are
+not caller input. Emission occurs explicitly inside the submission RPC after the report
+INSERT; there is no reports trigger, and maintenance/import paths do not implicitly
+notify.
+
+The server-authored message is fixed to `A new report needs Admin review.` It contains
+no reporter identity, category, description, Booking content, contact detail, address,
+identity-document information, or private message content. The report row and every
+persistent Admin notification row are one atomic RPC write: any required persistent
+notification failure rolls back the report and earlier fan-out rows. Zero active
+Administrators is valid and does not block submission.
+
+V4 #16 reuses the existing R5/R5B Broadcast and pg_net → Edge Function → Expo Push
+transport; no new transport or report context field is added. It introduces no
+automatic strike, suspension, matching/rating penalty, verification change,
+Booking/Job/payment mutation, table, column, index, trigger, cache, foreign key, or ERD
+relationship. Notification read state and report review state remain independent.
+
 #### Clarification — R3B report-scoped message evidence (2026-09-11) — LOCKED
 
 The R3 bullet above that deferred Admin message evidence is now implemented by

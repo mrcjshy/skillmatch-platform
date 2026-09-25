@@ -1384,6 +1384,53 @@ nothing else.
 **Notifications unchanged.** R3 does not modify `notifications_type_check` and does not
 emit report notification types.
 
+### V4 #16 trusted Admin report notification boundary — 2026-09-25
+
+**Status: LOCAL IMPLEMENTATION CANDIDATE; HOSTED NOT APPLIED.** This section preserves
+the R3 record above as historical provenance and supersedes only its no-report-
+notification behavior. The trusted producers are
+`public.submit_my_booking_report(uuid,text,text)` and
+`public.submit_my_app_issue(text)`. Both remain postgres-owned, volatile
+`SECURITY DEFINER` functions with an empty search path, authenticated-only EXECUTE,
+their existing authorization/validation/return contracts, and no direct report-table
+mutation path for callers.
+
+**Server-authored recipient and content.** After a report INSERT, each producer selects
+recipients only from `public.users` where `role = 'administrator' AND is_active = true`,
+ordered by user id, and invokes `private.emit_notification` once per recipient. Caller
+input cannot select a recipient, type, or message. Type is fixed to `report_submitted`;
+message is fixed to `A new report needs Admin review.` No reporter name, report content,
+contact/address data, identity document, or private message is copied into the immutable
+notification row.
+
+**Atomic persistent write.** The report INSERT and all required persistent notification
+INSERTs execute in one submission RPC transaction. There is no exception handler around
+emission: a required notification failure aborts the submission and rolls back the
+report plus any earlier fan-out row. Zero active Administrators is a valid success with
+zero notifications. The later R5B pg_net/Edge/Expo transport remains fail-open and is
+outside this persistent-write atomicity boundary. No reports INSERT trigger exists.
+
+**Existing notification controls preserved.** Notification SELECT remains recipient-
+only under RLS. Authenticated callers retain no direct INSERT, UPDATE, or DELETE
+privilege; read state changes only through the recipient-owned
+`mark_my_notification_read(uuid)` RPC. V4 #16 does not alter
+`private.emit_notification`, notification RLS/grants, R5/R5B trigger functions,
+`get_notification_push_targets`, or the push Edge Function. The existing type-generic
+push-target projection transports the new trusted type/message unchanged.
+
+**State isolation and Mobile expectation.** Submission changes no strike, account-active,
+verification, rating, matching, Booking, Job, or payment state. Notification read state
+does not review a report. Future Admin Mobile handling is expected to expose the Admin
+inbox and route `report_submitted` taps to `/admin/reports`; payload data must not choose
+the route. That Mobile work is not implemented by this backend gate.
+
+**Evidence boundary.** The focused rollback-safe local SQL proof covers both producers,
+active/inactive/multiple/zero-Admin derivation, fixed copy, caller-control absence,
+report authority, type-domain compatibility, notification DML denial and owned
+mark-read, persistent failure rollback, push-target projection, and discipline/state
+isolation. The unchanged R5B push-dispatch suite is a separate regression. This is not
+hosted-schema, hosted report-notification E2E, OS-push delivery, or Mobile UX proof.
+
 ### R5D-IMG-B1 portfolio image metadata — 2026-09-14
 
 Source-only at this record until a later hosted-apply gate. The contract lives in
