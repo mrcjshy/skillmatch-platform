@@ -1793,9 +1793,11 @@ new R2 fixture gate.
 persistence; AI-02 installed-APK PDF share sheet; AI-SVC-01 authorized nonzero-gap
 provider call; Worker portfolio max-five / multi-image gallery behavior.
 
-R5F OTP Authentication remains not active / not authorized. R5G Booking Confirmation
-Email remains flagged out. R5H Budget Negotiation remains not active / not
-authorized. R5I core Reports remain implemented; only integrated regression / UX
+The historical R5F OTP Authentication proposal recorded by this closeout was not
+active or authorized at that time. It is superseded for new registration by locked
+V4 #2 / D-010 and the later V4 local-implementation record below. R5G Booking
+Confirmation Email remains flagged out. R5H Budget Negotiation remains not active /
+not authorized. R5I core Reports remain implemented; only integrated regression / UX
 polish remains.
 
 ### Still deferred after BL-01A
@@ -2572,3 +2574,45 @@ Future gap template:
 ```
 GAP-NNN — <description>. Discovered-by: <task>. Status: OPEN | CLOSED (+ qualifier). Resolution path: <dedicated task>.
 ```
+
+## V4-9 / V4-4 / V4-2 / V4-6 — local implementation boundary (2026-09-29)
+
+V4-9 adds the private `job-photos` bucket with a 5 MiB bucket limit and the
+exact JPEG, PNG, and WebP MIME allowlist. Canonical keys are
+`<client-user-uuid>/<job-uuid>/<1|2|3>`. An active Client may insert photos only
+for their own open Job, may read photos for their own existing Job, and may
+delete them only while that Job remains open. An active Worker may read them
+only while assigned through an authoritative `confirmed` Booking. There is no
+UPDATE policy, anonymous/public access, Administrator exception, broad
+authenticated read, application table or column, or matching coupling. The
+native client validates byte signatures and size before upload, uses immutable
+slots, and requests short-lived signed URLs only after the applicable protected
+projection authorizes presentation.
+
+V4-4 adds the private `worker-profile-photos` bucket with a 5 MiB bucket limit
+and the exact JPEG, PNG, and WebP MIME allowlist. The only accepted object key
+is `<worker-user-uuid>/avatar`. Storage RLS grants an active Worker SELECT,
+INSERT, and DELETE for their own exact key and grants an active Client SELECT
+only for the exact assigned Worker while an authoritative Booking is
+`confirmed`. There is no UPDATE policy, public URL path, Administrator
+exception, identity-bucket reuse, business table, business column, or matching
+coupling. The native client validates the local byte signature before upload,
+uses explicit delete-then-upload replacement, and requests 60-second signed
+URLs. Missing or unavailable bytes fall back to initials.
+
+V4-2 changes the local Auth contract so a new email signup requires a six-digit
+OTP and does not perform account bootstrap or legal-consent persistence until
+OTP verification returns a non-null session. Resend uses the signup operation,
+a visible 60-second cooldown, and generic error copy. OTPs, passwords, access
+tokens, refresh tokens, authorization headers, and backend error details are
+not logged. Existing password recovery remains its separate email-link flow.
+V4-6 stores local SkillMatch confirmation and recovery template sources; the
+local Supabase config references them without adding SMTP credentials.
+
+At the time this local boundary was recorded, the Storage migrations had not
+been applied, hosted Auth settings had not changed, hosted SMTP was not
+configured, and no email was sent. The Storage SQL test scripts existed but had
+not been executed locally because Docker was unavailable; static review is not
+SQL runtime evidence. Later hosted/runtime evidence, if any, must be recorded as
+a separate truth layer and must not retroactively be described as local SQL
+execution.

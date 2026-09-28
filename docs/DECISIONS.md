@@ -1485,3 +1485,21 @@ landing/information-only runtime.
 
 This is implementation evidence for the existing locked decision. It creates no new
 architecture decision and no new decision id.
+
+### D-010 — V4 Worker avatar and registration email OTP (2026-09-29) — LOCKED
+
+V4 #4 is an optional, user-facing Worker profile avatar. It is separate from
+identity evidence and has no effect on verification, matching, ratings,
+availability, reports, or account status. It uses one private canonical
+Storage object at `<worker-user-uuid>/avatar` in `worker-profile-photos`; it
+adds no business table or column. The active Worker owns the object. An active
+Client may read it only while assigned to that Worker by a currently confirmed
+Booking. Administrators, anonymous users, unrelated users, and Clients whose
+Booking is no longer confirmed receive no photo-byte access.
+
+V4 #2 is six-digit email OTP verification for new registrations. A new signup
+does not bootstrap an operational SkillMatch account until Supabase returns an
+authoritative session from OTP verification. Existing password recovery stays
+an email-link flow. V4 #6 supplies version-controlled SkillMatch signup and
+recovery templates, while SMTP credentials and hosted Auth/template activation
+remain separately authorized hosted configuration.
