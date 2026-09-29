@@ -49,6 +49,48 @@ Locked R3 contract:
 - Report-scoped Admin message evidence is deferred to R3B. R3 does not grant Admin
   general message access.
 
+#### V5-2 — One Counterpart Report Per Participant Per Booking (2026-09-29) — LOCKED
+
+V5-2 supersedes R3's historical active-only duplicate-report rule. For Booking-bound
+counterpart reports, the same `(reporter_id, booking_id)` may occur at most once,
+regardless of whether the earlier report is `submitted`, `under_review`, `resolved`, or
+`dismissed`.
+
+Each Booking participant retains independent reporting authority: the Client may report
+the Worker once for that Booking, and the Worker may report the Client once for that
+Booking. One participant's report does not prevent the other participant's single
+report. `app_issue` reports remain outside this uniqueness rule because they are not
+Booking-bound.
+
+Historical report rows must be preserved without deletion, merging, rewriting, or
+retroactive alteration. Backend enforcement reuses the existing `public.reports`
+architecture and collapses duplicate conflicts to the existing safe `SM409` contract.
+No new business or ERD table is authorized.
+
+This belongs as the D-001 amendment / R3 dated contract note. It is not a new
+decision id.
+
+Effective status of D-001 from this amendment onward: LOCKED as amended. The original
+11-table line above is retained for append-only provenance but is superseded by this
+amendment for application-table count.
+
+#### V5 report outcome email authority (2026-09-29) — LOCKED
+
+V5 adds the explicitly approved nullable `reports.disciplinary_outcome` field; it adds no
+table or ERD entity. Allowed non-NULL values are `no_show_strike` and
+`account_suspended`. Ordinary `review_report` never writes the field. Only
+`resolve_no_show_report_with_strike` derives and writes it: strikes that do not cause a
+new suspension use `no_show_strike`, while only an actual active-to-inactive third-strike
+transition uses `account_suspended`.
+
+The report-outcome email boundary accepts only `report_id` from an authenticated active
+Administrator. Recipient selection, terminal outcome, disciplinary result, reviewed
+time, response, and email content are server-derived. The reported party never receives
+reporter identity, report description, or the free-form Administrator response. A
+terminal report may be retried without replaying review or discipline; deterministic
+provider idempotency keys derive from Report id, authoritative reviewed time, and
+recipient class. No delivery-tracking or outbox table is introduced for V5.
+
 This belongs as the D-001 amendment / R3 dated contract note. It is not a new
 decision id.
 

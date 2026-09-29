@@ -1550,6 +1550,55 @@ nothing else.
 **Notifications unchanged.** R3 does not modify `notifications_type_check` and does not
 emit report notification types.
 
+#### V5-2 — permanent Booking-report uniqueness amendment (2026-09-29) — LOCKED
+
+V5-2 preserves the R3 report authorization, participant derivation, RLS, grants, Admin
+review, and safe-error boundaries while superseding only R3's active-only duplicate
+rule. A Booking-bound counterpart report is permanently unique by
+`(reporter_id, booking_id)`, independent of `submitted`, `under_review`, `resolved`, or
+`dismissed` status. The Client and Worker remain separate reporters and may each file
+their own single counterpart report for the same Booking. `app_issue` rows have a NULL
+`booking_id` and remain repeatable.
+
+Existing report rows are historical records and must not be deleted, merged, rewritten,
+or otherwise retroactively altered. Enforcement remains within `public.reports`; a
+duplicate attempt must collapse to `SM409` without exposing PostgreSQL `23505`, an index
+name, or an existing report identifier. No new table or ERD entity is introduced.
+
+#### V5-FIX — phone OTP and report-outcome email authority (2026-09-29)
+
+**Status: LOCAL PUBLICATION CANDIDATE; HOSTED NOT APPLIED; PROVIDERS HELD.** Phone OTP is
+enabled only by the exact `EXPO_PUBLIC_PHONE_OTP_ENABLED=true` value. Missing, false,
+zero, or unknown values keep it disabled. In that state, the normalized Philippine
+registration phone remains required bootstrap data but is format-validated only; Auth
+phone confirmation is not required and no route may deadlock on `/verify-phone`. When
+enabled, the existing-user phone-change contract remains `updateUser({ phone })` followed
+by `verifyOtp({ phone, token, type: 'phone_change' })`; no phone-only Auth account is
+created. SMS configuration and delivery remain unproven and are not activated here.
+
+One nullable, CHECK-constrained `public.reports.disciplinary_outcome` column is approved.
+It allows only `no_show_strike` and `account_suspended`; NULL means no disciplinary action
+is attached to the report. Authenticated roles retain no table or column UPDATE grant.
+Ordinary `review_report` does not name or write the column. The dedicated no-show strike
+RPC accepts only Report id and bounded Admin response, derives the outcome while holding
+its established Report → Worker profile → User locks, and writes `account_suspended`
+only when that action actually flips `users.is_active` true to false. An already-inactive
+2→3 result remains `no_show_strike`. Failure remains transaction-atomic with the
+existing report, strike, account, and trusted-notification writes.
+
+`report-outcome-email` retains `verify_jwt = true` and accepts an exact JSON object with
+`report_id` only. It authenticates an active Administrator, reads the terminal Report and
+recipient accounts through the server credential, and derives status, disciplinary
+event, recipients, content, and reviewed time without caller authority. App issues send
+only to the reporter. Reported-party content excludes reporter identity/contact/UUID,
+report description, Booking reference, and free-form Admin response. Provider
+idempotency keys are `skillmatch-report:<report_id>:<reviewed_at>:<recipient-class>`;
+retrying a terminal Report reuses the same key and never replays review or strike RPCs.
+The database decision remains committed if email delivery fails, and the Admin UI offers
+a terminal Send/Retry action. V5 adds no email delivery/outbox table. Edge deployment,
+Resend secrets/configuration, and delivery proof remain separately gated and were not
+performed by this local source change.
+
 ### V4 #16 trusted Admin report notification boundary — 2026-09-25
 
 **Status: LOCAL IMPLEMENTATION CANDIDATE; HOSTED NOT APPLIED.** This section preserves
