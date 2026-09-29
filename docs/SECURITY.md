@@ -2575,6 +2575,64 @@ Future gap template:
 GAP-NNN — <description>. Discovered-by: <task>. Status: OPEN | CLOSED (+ qualifier). Resolution path: <dedicated task>.
 ```
 
+## FT-05A — payment-before-completion and reviewed no-show discipline (2026-09-29)
+
+**Evidence layer: LOCAL SOURCE IMPLEMENTATION.** No hosted migration, Edge deployment,
+hosted data mutation, emulator/runtime proof, commit, push, or Second Brain synchronization
+is claimed by this entry. Docker was unavailable during FT-05A, so the SQL scripts are
+reviewable verification assets but are not local SQL runtime evidence.
+
+**#18 final-completion boundary.** `complete_my_client_booking(uuid)` remains an
+authenticated-only, postgres-owned `SECURITY DEFINER` RPC with an empty search path and
+an active-Client account gate. It locks Booking before Job, collapses missing,
+other-owned, wrong-lifecycle and inconsistent-pair cases to SM409, and checks for
+`payment_status = paid` only after ownership, confirmed lifecycle and pair consistency
+are proven. Unpaid then returns SM403. Its updates name only Booking lifecycle/time and
+Job status; method, payment status and provider reference are never written.
+
+COD retains Client method selection and assigned-Worker cash attestation. QR Ph retains
+service-role-only preparation, binding and settlement, authoritative Job-budget amount,
+PHP currency, immutable Payment Intent binding, TEST-provider truth, and no Client path
+to assert paid. These payment paths accept `confirmed` for the forward lifecycle and
+`completed` solely for historical pending-payment compatibility.
+
+**Cancellation/provider race boundary.** The reason-aware V4 #19 RPC continues to
+authorize the exact active participant and validate the existing five reason codes. Under
+the Booking lock it permits only `(NULL,pending,NULL)` or `(cod,pending,NULL)`.
+Bound QR Ph, paid/refunded and malformed tuples return SM403 before any Booking/Job or
+notification write. QR settlement accepts only confirmed or legacy completed Bookings,
+so cancelled and no-show records cannot settle. Bind, settle, cancel and completion all
+serialize first on the Booking row; no refund or provider cancellation was introduced.
+
+**#11 submission isolation.** `submit_my_booking_report` and ordinary
+`review_report` retain their existing behavior and never mutate strike, active status,
+Booking, Job, payment or matching state. The dedicated mutation accepts only Report id
+and Admin response. It derives the Worker from the locked Report and locks in the fixed
+order Report → Worker profile → User. Eligibility is Booking-bound no-show,
+submitted/under_review, Worker target, existing profile, and count below three.
+
+The postgres-owned `SECURITY DEFINER` action is revoked from PUBLIC, anon and
+service_role and granted only to authenticated, with `private.is_admin()` checked before
+target access. It works through—not around—the existing protected-column trigger model:
+ordinary clients receive no table UPDATE authority or generic Admin policy.
+
+**Strike arithmetic and atomic notifications.** Counts move 0→1→2→3 under the Worker
+profile lock. Counts one and two do not write `is_active`. At 2→3 an active Worker is
+set inactive; an already inactive Worker remains inactive without a misleading suspension
+notification. Exactly one fixed `no_show_strike` is emitted per successful action, and
+`account_suspended` is emitted only on an actual true-to-false transition. Admin response
+text is never copied into either notification. There is no exception handler around
+emission, so a failure rolls back Report resolution, strike and suspension together.
+
+**Admin advisory read.** `get_report_discipline_state(uuid)` is an Admin-only,
+read-only RPC returning only `eligible`, nullable current strike count and
+`would_suspend`. It returns no Worker id and confers no mutation authority. Mobile uses
+this server-derived result only to decide whether to display the distinct confirmed
+“Resolve + Apply Strike” action; the mutation RPC re-checks every predicate.
+
+No business/ERD table, matching function, scoring weight, tiebreaker, Booking `no_show`
+producer, payment table, strike table, or disciplinary-events table is added.
+
 ## V4-9 / V4-4 / V4-2 / V4-6 — local implementation boundary (2026-09-29)
 
 V4-9 adds the private `job-photos` bucket with a 5 MiB bucket limit and the

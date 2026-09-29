@@ -935,6 +935,42 @@ no-show reporting, `strike_count` mutation, and automatic third-strike enforceme
 not part of BL-01A and remain deferred until their abuse and adjudication rules can be
 defined safely. `status = 'no_show'` remains a schema value that no code path produces.
 
+#### FT-05 decision amendment — 2026-09-29 — AUTHORIZED, LOCAL IMPLEMENTATION
+
+This amendment supersedes only the two historical rules identified below. The earlier
+entries remain as implementation history.
+
+**#18 payment sequencing superseded.** For new Bookings, payment now settles while the
+Booking remains `confirmed`; only after `payment_status = 'paid'` may the owning active
+Client perform final completion. The Worker still has no completion authority.
+`complete_my_client_booking(uuid)` locks Booking then Job, validates the internally
+consistent pair, returns SM403 only after an owning confirmed Client and valid pair are
+established but payment is unpaid, preserves the entire payment tuple, and atomically
+completes Booking and Job with one Worker notification.
+
+Historical `completed + pending` records created under the superseded sequence are not
+stranded. COD and QR Ph payment paths accept both `confirmed` and legacy `completed`
+states while retaining their actor, provider, amount, binding and tuple checks.
+Completion itself accepts only `confirmed + paid`, so no new application path creates
+`completed + pending`.
+
+Cancellation remains terminal but is now payment-aware: exact fresh pending and COD
+pending tuples may cancel; a bound QR Ph Intent, any paid/refunded state, or any malformed
+tuple fails closed. No refund or provider-cancellation workflow is introduced.
+
+**#11 operational strike deferral superseded.** Report submission and ordinary review
+remain non-disciplinary. A strike exists only through the dedicated Administrator action
+`resolve_no_show_report_with_strike(report_id, admin_response)`, for a Booking-bound
+`no-show` Report in `submitted` or `under_review` whose server-derived reported user
+is a Worker with a profile and fewer than three strikes.
+
+The trusted lock order is Report → Worker profile → User. Strike one and two never alter
+`users.is_active`; strike three changes true to false, never reactivates an already
+inactive account, and emits `account_suspended` only when that transaction actually
+performs the true-to-false change. Every successful adjudicated strike emits exactly one
+fixed `no_show_strike` notification. No Booking `no_show` producer, generic discipline
+API, new table, matching change, refund, or automatic punishment on submission is added.
+
 **RPC shape — LOCKED.** Lifecycle writes use **narrow action-specific RPCs**, not a
 generic action-string transition function. The two actions have different actors —
 completion is Client-only, cancellation is either participant — and a single entry point
