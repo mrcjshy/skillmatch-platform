@@ -6,6 +6,172 @@ Two layered gates protect data: RLS policies (row-level) AND column guard trigge
 (column-level). They compose — a trigger ALLOW never bypasses RLS, and passing RLS
 never bypasses a trigger; both must pass for a write to land.
 
+## V4 location security amendment — 2026-09-24 — APPROVED / NOT YET IMPLEMENTED
+
+The Josh-approved “V4 authoritative Job pin and eligible-Worker exact location”
+amendment in `docs/DECISIONS.md` intentionally changes the pre-accept privacy model.
+It supersedes the conflicting approximate-only Worker and independent manual-address
+requirements in the dated R5E-D1 contract below. R5E implementation/verification
+records, including the approximate-area RPC and confirmed-Booking exact-location
+records, remain historical evidence of their recorded behavior, not evidence that
+V4 is implemented or tested. Nonconflicting security restrictions remain in force.
+
+**Sensitive location, narrow audience.** Exact pre-accept Job coordinates and the
+pin-derived canonical address remain sensitive information. Retrieval is permitted
+only for an authenticated, active, verified caller with role `worker`, currently
+eligible for that Job under existing authoritative opportunity/acceptance semantics,
+while the Job remains available to that Worker. No second matching algorithm is
+authorized. Anonymous/public users, unrelated Workers, and Clients other than the
+owner gain no location access or unrelated Client personal information.
+
+**Server authorization, not table disclosure.** Reuse `private.job_locations` with
+no new direct table grants: no ordinary Worker SELECT, PUBLIC access,
+authenticated-wide coordinate access, or broad Admin/Client grants. The preferred
+implementation is a narrow `SECURITY DEFINER` retrieval RPC that proves current
+authorization and returns only the necessary latitude, longitude, canonical derived
+address, barangay, and city. Unauthorized access must fail closed under existing
+error discipline without a useful Job/location existence oracle. Existing owner
+access and the separately protected confirmed-Booking participant path remain
+unchanged, including terminal-Booking suppression.
+
+**Revocation.** When another Worker wins, the Job becomes unavailable, or the Worker
+becomes ineligible, inactive, or unverified, fresh pre-accept retrieval must no longer
+be authorized. The UI must revalidate authoritative access, handle stale-screen and
+focus concerns, and remove sensitive exact-location state after access is lost.
+The assigned Worker's confirmed-Booking path remains valid independently.
+
+**Pin integrity and independent service/matching rules.** The final Client-selected
+pin is authoritative; validate it, reverse geocode it, and use its derived address as
+canonical Job text. Stale/manual unrelated address text must not survive as canonical.
+Any future directions/landmarks field is supplemental only; no new column is
+authorized. Current-position use is one-time/user-triggered foreground positioning,
+including on picker opening when permission exists, never continuous/background
+tracking or location history. Preserve Santa Ana polygon fingerprint `626f7138` and
+client/server geofence enforcement. Basemap coverage is geographic context only;
+it decides neither service area nor authorization. Matching formula, eligibility,
+ranking, and first-valid acceptance remain unchanged; GPS distance, live coordinates,
+routing distance, provider ranking, and travel time are not new matching inputs.
+
+**Privacy and research follow-up.** CURRENT PRIVACY COPY REQUIRES REVIEW: the previous
+policy/Worker contract treated exact location as confirmed-Booking-only information.
+The mismatch must remain explicit during development/system checking. A later gate
+must assess policy wording, version bump, renewed consent for existing users, and
+timing before real participant/community use. No Privacy Policy, Terms, consent
+version, or consent records change here. Implementation-vs-manuscript consistency
+remains HELD until implementation freeze; V7 may temporarily differ. No manuscript,
+methodology, ERD, DFD, new business table, or relationship change is authorized;
+required schema expansion must STOP for separate approval.
+
+**Evidence boundary.** This is approved intent only. No V4 Mobile/backend
+implementation, SQL/migration, runtime/build, hosted mutation, or implementation
+testing was performed by this documentation gate. Existing historical evidence must
+not be presented as proof of the new authorization boundary.
+
+### V4-LOC-01 — local implementation candidate — 2026-09-24
+
+**Status: IMPLEMENTED / LOCAL-VERIFIED; UNSTAGED CANDIDATE, NOT DEPLOYED.** This
+later implementation record supersedes the amendment gate's not-yet-implemented
+status above only for the local source/rollback scope recorded here. No hosted or
+native-runtime verification is claimed.
+
+**RPC.** Candidate migration
+`20260924090000_v4_loc_01_worker_opportunity_location.sql` adds only
+`public.get_my_opportunity_location(p_job_id text) RETURNS jsonb`, postgres-owned,
+STABLE SECURITY DEFINER with an empty search path. Authentication, active Worker
+role, and verified profile checks precede canonical UUID text validation/casting.
+Unauthorized callers receive `42501`; an authorized malformed argument receives
+`22023`. The function consumes `list_my_job_opportunities()` unchanged and joins
+only the authorized Job's saved location. Missing/ineligible/unavailable Jobs and
+absent location rows share SQL NULL. The five output fields are latitude, longitude,
+address, barangay, city; nullable legacy addresses remain JSON null. PUBLIC, anon,
+and service_role execution are revoked; authenticated receives EXECUTE only.
+No table/column grant, RLS policy, business table, relationship, matching function,
+geofence, or existing confirmed-Booking location function changes.
+
+**Client.** The existing react-native-maps picker derives an address using native
+expo-location after Current Location selection or completed tap/drag placement.
+Pin changes invalidate the prior address and confirmation immediately. A valid
+Santa Ana pin plus successful reverse geocoding is required for “Choose this job
+location”; failures retain the pin, expose retry, and block confirmation. Post Job
+uses a read-only confirmed address and the selected coordinate. No extra field,
+external geocoder, background tracking, or matching input is added.
+
+**Worker freshness.** The separate exact pre-accept read supplies the MapLibre
+11.4.0/OpenFreeMap Liberty marker at `[longitude, latitude]` and saved address.
+Focus/foreground, manual refresh, and the existing opportunity invalidation channel
+clear the sensitive projection before re-reading opportunity/location authority.
+Blur/background, account/Job lifetime change, unmount, and acceptance loss revoke
+the current read generation; older replies cannot repopulate exact state. Accept is
+disabled during authoritative loading and removed with an unavailable opportunity.
+A NULL location followed by a successful fresh opportunity-list check preserves
+legacy acceptance without exposing any exact data. External navigation remains on
+the existing confirmed-Booking path only. No generic polling is introduced.
+
+**Local evidence.** The focused SQL rollback script passed 29/29 assertions,
+including an actual synthetic acceptance followed by losing-Worker denial and
+winning-Worker confirmed-location success. Existing geofence SQL passed 22/22;
+existing private-location/Booking privacy SQL passed 56/56. Tests loaded the candidate
+only inside transactions and rolled back. Existing function fingerprints remained
+unchanged; checked Job/location/profile counts returned to zero, local migration
+history remained 32 rows, and the candidate function was absent afterward. Local
+push-dispatch hooks reported skipped dispatch because vault configuration was absent.
+This is not a full-instance rollback claim (sequence/log bookkeeping is not covered).
+Focused Mobile tests passed 145/145 across seven files; TypeScript, targeted
+no-autofix ESLint, and diff checks passed. These are source/helper and SQL-claims
+checks, not native UI, GPS/geocoder-service, HTTP-role, or concurrent transaction proof.
+
+**Retained limits.** The existing development-only MapLibre guard remains: release
+builds use the text fallback. No APK/build, emulator, device, sign-in/out, hosted SQL,
+or hosted business mutation was performed. Existing Jobs were not backfilled with
+geocoded addresses; legacy stored text is not certified as pin-derived. Native
+reverse-geocoder accuracy and availability need later runtime verification. The
+backend stores the submitted address and coordinate atomically but does not itself
+attest to native reverse-geocoder provenance. Matching and Santa Ana fingerprint
+`626f7138` remain unchanged.
+
+**PRIVACY POLICY SYNCHRONIZATION: REQUIRED BEFORE REAL PARTICIPANT/COMMUNITY USE.**
+Exact wording, policy version, whether renewed consent is required, and enforcement
+timing remain unresolved. Policy, Terms, consent versions/records, V7, ERD, DFD, and
+methodology were not changed. Manuscript consistency remains held until implementation
+freeze. System-checking/demo implementation does not resolve the policy mismatch.
+
+### FT-06A — local implementation and hosted entry inspection (2026-09-29)
+
+The FT-06A dispatch clarifies that coordinates, not address metadata, are the
+authority for service area and protected location. The UI binds a read-only
+reverse-geocoded address to its confirmed pin. Existing write RPCs sanitize and
+store nonblank submitted display metadata atomically; they do not attest to
+geocoder provenance, and that metadata is not an authorization/matching input.
+Geocoder failure blocks confirmation, never substitutes stale/manual text.
+Android permission requests are explicit foreground address-confirmation actions;
+permanent denial directs to Settings. No background service or tracking is added.
+
+Read-only hosted entry inspection found 44 migration rows, exactly one
+`20260924090000` V4-LOC migration, and 13 public application tables. Its existing
+local migration is repository reconciliation only and MUST NOT be reapplied.
+All four expected matching-definition hashes matched the FT-06A dispatch.
+
+The local forward candidate `20260929023803_ft06_worker_eligibility_invalidation`
+adds statement-level invalidation triggers for user eligibility fields, Worker
+profiles and Worker skills. It reuses the existing postgres-owned trigger-only
+empty-payload broadcaster. Existing Job/Job-skill triggers remain. No table,
+policy, grant, matching definition or geofence is changed. Realtime may attach
+its generated transport message id; no business id, address, coordinates or
+contact is supplied in the payload. Delivery remains best-effort transport;
+every location reread still authorizes through the existing trusted RPC.
+
+Mobile candidates clear exact presentation before authoritative revalidation,
+on transport failure, blur and background; pending old generations cannot
+restore it. Confirmed Client and Worker maps share fixed-destination rendering.
+The open-Job Client editor calls the existing ownership/open-state checked RPC.
+No fake coordinates or historical-address provenance backfill is performed.
+
+**Evidence boundary:** local implementation is in progress, not closed or
+published. The forward migration has NOT been applied. Docker is unavailable;
+the new SQL script has NOT been executed locally. Hosted business/runtime
+mutations and FT-06A Android proof have not yet occurred. Historical evidence
+above retains its dated renderer and test limits. Second Brain sync is pending.
+
 ## Function security split (locked)
 
 - `private.is_admin()`, `private.is_active_worker()` — `SECURITY DEFINER`, `STABLE`,

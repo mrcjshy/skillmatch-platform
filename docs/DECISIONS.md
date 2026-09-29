@@ -322,6 +322,143 @@ Authorized future TDD seams after this lock is committed are recorded in
 `docs/SECURITY.md` (R5E-D1). No test is written until those seams are used in an
 authorized implementation lane.
 
+#### Amendment — V4 authoritative Job pin and eligible-Worker exact location (2026-09-24) — LOCKED
+
+Josh-approved V4-LOC decision amendment. **APPROVED / NOT YET IMPLEMENTED.**
+This is an intentional privacy-model change, not a bug fix or merely a renderer
+change. It supersedes only the conflicting location/privacy clauses in the
+2026-09-15 R5E Job-pin contracts above: separately authoritative manual address,
+the previous current-location interaction restriction where it conflicts with the
+flow below, and approximate-only pre-accept Worker disclosure (including the
+confirmed-Booking-only restriction on Worker exact-location access). Those clauses
+remain historical records, not current V4 requirements. All nonconflicting locks
+remain in force; this amendment does not claim that source or runtime already
+implements the new contract.
+
+**Authoritative pin and address.** The final Client-selected Job pin is the
+authoritative Job service location. Choose/reposition the pin, validate it against
+the approved Santa Ana service area, reverse geocode that final accepted pin,
+preview its derived address, then submit the exact coordinate together with that
+canonical derived address. The application must not pair a pin at location A with
+an unrelated canonical address at location B. A separately authoritative manual
+address is no longer required or permitted. Any editable text retained during
+migration must not silently contradict the final pin. Future free-text directions
+or landmarks are supplemental instructions only, not independent location authority.
+No new column is authorized: implementation must first inspect whether existing
+fields satisfy this contract. A reverse-geocoding failure must not restore stale
+address text as canonical; retain the valid pin and expose a retry/error state.
+Implementation must inspect existing schema requirements before deciding the
+submission behavior while a derived address is unavailable.
+
+**Client positioning.** Opening the picker may obtain the current device position
+when permission already exists, center/select the pin, and let the Client reposition
+it. Validate the selected pin, reverse geocode the final pin at an appropriate
+interaction boundary, preview the exact derived location, and require Client
+confirmation. GPS is one-time/user-triggered positioning only. Permission requests
+remain explicit foreground actions; denied/unavailable positioning retains manual
+pin placement without repeated forced prompts. Save only the final Job pin, not a
+separate current-position record. No continuous or background tracking is authorized.
+
+**Santa Ana remains the service authority.** Preserve the approved service-area
+polygon and boundary fingerprint `626f7138`, client validation, and server-side
+validation. A final pin inside that polygon is allowed; a pin outside is rejected.
+Basemap coverage of Pateros, Taguig, Metro Manila, the Philippines, or surrounding
+areas does not expand the operational service area. MapLibre/OpenFreeMap or a future
+provider renders geographic context only; it determines neither service eligibility,
+Worker eligibility, nor location authorization.
+
+**Exact pre-accept audience.** A Worker may view the exact Job pin and its canonical
+pin-derived address before acceptance only when authenticated, role = `worker`,
+active, verified, currently eligible for that Job/opportunity, and the Job remains
+available to that Worker. Reuse the authoritative opportunity/acceptance eligibility
+semantics used by `list_my_job_opportunities()` and `accept_job_opportunity()`; do not
+create a second matching algorithm for location access. This adds no anonymous,
+public, unrelated-Worker, or Client-other-than-owner access.
+
+**Temporary authorization and freshness.** Fresh retrieval must fail closed when
+another Worker wins, the Job becomes unavailable, or the caller becomes ineligible,
+inactive, or unverified. Implementation must handle stale screens, focus, and
+authoritative access revalidation. The UI must not intentionally retain sensitive
+exact-location data after access is lost. Existing confirmed-Booking exact-location
+authorization for the assigned Worker remains separately protected and valid; the
+new pre-accept path supplements rather than replaces it. Existing owning-Client
+authorization and terminal-Booking suppression remain unchanged. No broad Client
+read authority is granted.
+
+**Narrow backend boundary.** Reuse `private.job_locations`; exact coordinates remain
+behind narrow server authorization. No ordinary Worker SELECT, PUBLIC access,
+authenticated-wide coordinate access, or broad Admin/Client coordinate grants are
+authorized. Preferred architecture is a narrow `SECURITY DEFINER` RPC that authorizes
+the caller, proves current opportunity eligibility/availability, and returns only the
+needed latitude, longitude, canonical derived address, barangay, and city. Keep the
+confirmed-Booking authorization surface separate. No unrelated Client personal
+information, location history, or continuous Worker/Client tracking is authorized.
+
+**Matching and lifecycle preserved.** Exact-pin visibility changes no matching
+formula, eligibility, or ranking. GPS distance, live Worker coordinates, routing
+distance, map-provider ranking, and travel time are not new matching inputs. Preserve
+first-valid Worker acceptance, Booking/payment lifecycle, Worker verification
+authority, and existing auth/session and Terms/consent behavior.
+
+**Privacy follow-up — CURRENT PRIVACY COPY REQUIRES REVIEW.** Existing policy and the
+previous Worker disclosure contract treated exact location as confirmed-Booking-only
+information. Development/system-checking implementation must record this mismatch
+accurately; privacy documentation is not already synchronized. A separate gate must
+determine exact Privacy Policy wording, version bump, whether existing users require
+renewed consent, and timing before real participant/community use. This amendment
+does not authorize Privacy Policy edits, consent-version changes, or consent-record
+changes.
+
+**Research and schema boundaries.** Implementation-vs-manuscript consistency remains
+HELD until implementation freeze; the current V7 description may temporarily differ
+from approved V4 behavior. No manuscript, methodology, ERD relationship, new business
+table, or automatic DFD revision is authorized. Reuse existing location infrastructure;
+if implementation proves schema expansion is required, STOP for separate approval.
+
+**Gate boundary.** This gate changes decision/security documentation only. It does
+not implement Mobile/backend behavior, create SQL/migrations, authorize hosted
+mutation, runtime/build work, Git publication, vault sync, or manuscript revision.
+V4-LOC-01 remains the next separately dispatched implementation gate.
+
+#### FT-06A clarification — final V4-LOC implementation contract (2026-09-29)
+
+Josh's FT-06A dispatch resolves the remaining V4-LOC implementation details.
+The final coordinate is authoritative for service area, retrieval, privacy,
+lifecycle and navigation. Its reverse-geocoded canonical address is derived
+display metadata, not an authorization, geofence, eligibility or matching input.
+Existing trusted write RPCs may accept sanitized nonblank address metadata;
+no server-side geocoding provider or new schema object is required for provenance.
+The normal Client UI must bind a read-only address to the confirmed selected pin.
+Failed geocoding retains the candidate pin, clears the address, disables
+confirmation and offers retry. Old asynchronous replies must not restore it.
+
+The final operational native map stack is MapLibre 11.4.0 with OpenFreeMap
+Liberty (`https://tiles.openfreemap.org/styles/liberty`) across Client picker,
+Worker opportunity and confirmed Booking surfaces. The earlier hybrid renderer
+is superseded. Remove embedded react-native-maps/Google Maps SDK/key consumption;
+external fixed-destination navigation with an HTTPS Maps fallback remains allowed.
+
+The picker uses a fixed center pin with the map moving underneath. Android
+reverse geocoding requires foreground permission: without it the Client may
+move the map but cannot confirm its canonical address. Only an explicit
+"Enable Location to Confirm Address" action requests permission; denial offers
+explanation/retry, permanent denial offers Settings. Existing permission permits
+one fresh foreground position fix, never watchers, background location or history.
+
+Owning Clients may view/edit an open Job's location through the existing trusted
+update RPC; acceptance makes it immutable. Confirmed owning Client and assigned
+Worker Booking surfaces show authorized exact location; terminal states suppress
+protected presentation. Legacy text is not certified canonical and receives no
+invented coordinates. Worker pre-accept eligibility and first-valid acceptance
+remain unchanged. Eligibility/transport/lifecycle invalidations clear protected
+presentation before an authoritative reread. Broadcast carries no destination.
+
+Matching (50/30/20, barangay/city), the 153-vertex Santa Ana polygon/fingerprint
+`626f7138`, private location storage and the 13 public application tables remain
+unchanged. Privacy-policy/consent reconciliation before real community use stays
+separately gated. This clarification is approved intent, not publication or runtime
+evidence; those layers require their own verification record.
+
 ### D-002 — Two-stage matching (2026-08-20) — LOCKED
 Stage 1 eligibility filter: matching required skill, worker availability, account
 active / not suspended. Stage 2 weighted ranking: 40 skill / 30 location /
