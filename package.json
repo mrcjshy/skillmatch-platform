@@ -7,25 +7,39 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:website": "node scripts/website-check.mjs",
+    "test:e2e": "e2e run"
   },
   "dependencies": {
+    "@fontsource-variable/dm-sans": "5.3.0",
+    "@fontsource-variable/manrope": "5.3.0",
     "@supabase/supabase-js": "^2.101.0",
+    "@vercel/analytics": "2.0.1",
+    "expo": "^58.0.21",
+    "framer-motion": "13.4.6",
+    "gsap": "3.15.0",
+    "lucide-react": "1.49.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.2"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@e2e-dev/mobile": "^0.12.1",
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "e2e": "^0.21.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "tailwindcss": "^4.3.3",
+    "typescript": "~6.0.3",
     "vite": "^8.0.1"
   }
 }

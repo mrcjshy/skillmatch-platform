@@ -203,4 +203,41 @@ export async function handleRequest(req: Request): Promise<Response> {
   return json(200, { delivered: true });
 }
 
-if (import.meta.main) Deno.serve(handleRequest);
+/**
+ * RF-A: the Administrator web console calls this function from a browser.
+ * Only origins listed in ADMIN_WEB_ORIGINS (comma-separated, exact match) are
+ * echoed; there is no wildcard. CORS is a browser read permission, not
+ * authorization: every POST still goes through handleRequest's bearer +
+ * active-Administrator check.
+ */
+export function corsHeaders(
+  origin: string | null,
+  allowedList: string | undefined,
+): Record<string, string> {
+  const allowed = (allowedList ?? "").split(",").map((s) => s.trim())
+    .filter((s) => s !== "" && s !== "*");
+  if (origin === null || !allowed.includes(origin)) return { vary: "Origin" };
+  return {
+    "access-control-allow-origin": origin,
+    "access-control-allow-headers": "authorization, apikey, content-type, x-client-info",
+    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-max-age": "600",
+    vary: "Origin",
+  };
+}
+
+export async function handleWithCors(req: Request): Promise<Response> {
+  const cors = corsHeaders(req.headers.get("origin"), Deno.env.get("ADMIN_WEB_ORIGINS"));
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: "access-control-allow-origin" in cors ? 204 : 403,
+      headers: cors,
+    });
+  }
+  const response = await handleRequest(req);
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(cors)) headers.set(key, value);
+  return new Response(response.body, { status: response.status, headers });
+}
+
+if (import.meta.main) Deno.serve(handleWithCors);

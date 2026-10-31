@@ -140,13 +140,13 @@ BEGIN
   BEGIN
     PERFORM pg_temp.jwt(user_own);
     SET LOCAL ROLE authenticated;
-    PERFORM public.record_my_consent('2026-09-v1', '2026-09-v1');
+    PERFORM public.record_my_consent('2026-09-v1', '2026-10-v1');
     SELECT c.user_id, c.terms_version, c.privacy_version
       INTO v_uid, v_terms, v_privacy
     FROM public.get_my_consent() AS c;
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(4, 'own get_my_consent returns recorded row',
-      v_uid = user_own AND v_terms = '2026-09-v1' AND v_privacy = '2026-09-v1',
+      v_uid = user_own AND v_terms = '2026-09-v1' AND v_privacy = '2026-10-v1',
       coalesce(v_uid::text, 'null') || ' ' || coalesce(v_terms, ''));
   EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.clear_jwt();

@@ -437,6 +437,21 @@ verify_jwt = true
 [functions.push-notification]
 verify_jwt = false
 
+# RF-02 / D-011: participant call API. verify_jwt stays true and the handler
+# also resolves the real user (a project key alone satisfies verify_jwt).
+[functions.booking-call]
+verify_jwt = true
+
+# RF-02: scheduler/maintenance boundary. Caller is pg_cron -> pg_net (no user
+# JWT); the Vault-held x-skillmatch-dispatch-secret is the boundary.
+[functions.booking-call-reconcile]
+verify_jwt = false
+
+# RF-02: LiveKit webhook hints. Caller is the provider; its signed
+# Authorization JWT (HS256 + sha256 body claim) is the boundary.
+[functions.livekit-webhook]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

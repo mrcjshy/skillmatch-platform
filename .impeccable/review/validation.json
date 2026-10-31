@@ -1,0 +1,267 @@
+{
+  "baseURL": "http://127.0.0.1:4183",
+  "results": [
+    {
+      "name": "Matching rules reproduce the two real app scores",
+      "passed": true
+    },
+    {
+      "name": "Matching rules follow the D-002 gate and tiebreaks",
+      "passed": true
+    },
+    {
+      "name": "320px: all sections, no overflow or broken images",
+      "passed": true
+    },
+    {
+      "name": "320px: real logo in the header",
+      "passed": true
+    },
+    {
+      "name": "320px: headings stay on two lines or fewer",
+      "passed": true
+    },
+    {
+      "name": "320px: automated accessibility scan",
+      "passed": true
+    },
+    {
+      "name": "320px: try a match uses the real rules",
+      "passed": true
+    },
+    {
+      "name": "320px: role tabs and gallery",
+      "passed": true
+    },
+    {
+      "name": "320px: FAQ keyboard toggle and download state",
+      "passed": true
+    },
+    {
+      "name": "320px: mobile menu, Escape, section navigation",
+      "passed": true
+    },
+    {
+      "name": "320px: real app clip stays still",
+      "passed": true
+    },
+    {
+      "name": "320px: reduced motion rests on the locked S",
+      "passed": true
+    },
+    {
+      "name": "390px: all sections, no overflow or broken images",
+      "passed": true
+    },
+    {
+      "name": "390px: real logo in the header",
+      "passed": true
+    },
+    {
+      "name": "390px: headings stay on two lines or fewer",
+      "passed": true
+    },
+    {
+      "name": "390px: automated accessibility scan",
+      "passed": true
+    },
+    {
+      "name": "390px: try a match uses the real rules",
+      "passed": true
+    },
+    {
+      "name": "390px: role tabs and gallery",
+      "passed": true
+    },
+    {
+      "name": "390px: FAQ keyboard toggle and download state",
+      "passed": true
+    },
+    {
+      "name": "390px: mobile menu, Escape, section navigation",
+      "passed": true
+    },
+    {
+      "name": "390px: real app clip stays still",
+      "passed": true
+    },
+    {
+      "name": "390px: reduced motion rests on the locked S",
+      "passed": true
+    },
+    {
+      "name": "768px: all sections, no overflow or broken images",
+      "passed": true
+    },
+    {
+      "name": "768px: real logo in the header",
+      "passed": true
+    },
+    {
+      "name": "768px: headings stay on two lines or fewer",
+      "passed": true
+    },
+    {
+      "name": "768px: automated accessibility scan",
+      "passed": true
+    },
+    {
+      "name": "768px: try a match uses the real rules",
+      "passed": true
+    },
+    {
+      "name": "768px: role tabs and gallery",
+      "passed": true
+    },
+    {
+      "name": "768px: FAQ keyboard toggle and download state",
+      "passed": true
+    },
+    {
+      "name": "768px: mobile menu, Escape, section navigation",
+      "passed": true
+    },
+    {
+      "name": "768px: real app clip stays still",
+      "passed": true
+    },
+    {
+      "name": "768px: reduced motion rests on the locked S",
+      "passed": true
+    },
+    {
+      "name": "1024px: all sections, no overflow or broken images",
+      "passed": true
+    },
+    {
+      "name": "1024px: real logo in the header",
+      "passed": true
+    },
+    {
+      "name": "1024px: headings stay on two lines or fewer",
+      "passed": true
+    },
+    {
+      "name": "1024px: automated accessibility scan",
+      "passed": true
+    },
+    {
+      "name": "1024px: try a match uses the real rules",
+      "passed": true
+    },
+    {
+      "name": "1024px: role tabs and gallery",
+      "passed": true
+    },
+    {
+      "name": "1024px: FAQ keyboard toggle and download state",
+      "passed": true
+    },
+    {
+      "name": "1024px: real app clip stays still",
+      "passed": true
+    },
+    {
+      "name": "1024px: reduced motion rests on the locked S",
+      "passed": true
+    },
+    {
+      "name": "1280px: all sections, no overflow or broken images",
+      "passed": true
+    },
+    {
+      "name": "1280px: real logo in the header",
+      "passed": true
+    },
+    {
+      "name": "1280px: headings stay on two lines or fewer",
+      "passed": true
+    },
+    {
+      "name": "1280px: automated accessibility scan",
+      "passed": true
+    },
+    {
+      "name": "1280px: try a match uses the real rules",
+      "passed": true
+    },
+    {
+      "name": "1280px: role tabs and gallery",
+      "passed": true
+    },
+    {
+      "name": "1280px: FAQ keyboard toggle and download state",
+      "passed": true
+    },
+    {
+      "name": "1280px: real app clip stays still",
+      "passed": true
+    },
+    {
+      "name": "1280px: reduced motion rests on the locked S",
+      "passed": true
+    },
+    {
+      "name": "1440px: all sections, no overflow or broken images",
+      "passed": true
+    },
+    {
+      "name": "1440px: real logo in the header",
+      "passed": true
+    },
+    {
+      "name": "1440px: headings stay on two lines or fewer",
+      "passed": true
+    },
+    {
+      "name": "1440px: automated accessibility scan",
+      "passed": true
+    },
+    {
+      "name": "1440px: try a match uses the real rules",
+      "passed": true
+    },
+    {
+      "name": "1440px: role tabs and gallery",
+      "passed": true
+    },
+    {
+      "name": "1440px: FAQ keyboard toggle and download state",
+      "passed": true
+    },
+    {
+      "name": "1440px: real app clip stays still",
+      "passed": true
+    },
+    {
+      "name": "1440px: reduced motion rests on the locked S",
+      "passed": true
+    },
+    {
+      "name": "Normal motion: the S parts, then locks on scroll",
+      "passed": true
+    },
+    {
+      "name": "Normal motion: nothing stays hidden after scrolling",
+      "passed": true
+    },
+    {
+      "name": "Normal motion: try a match still works",
+      "passed": true
+    },
+    {
+      "name": "Unknown operational route returns to the public page",
+      "passed": true
+    },
+    {
+      "name": "No backend, analytics, or third-party runtime requests",
+      "passed": true
+    },
+    {
+      "name": "No browser console errors or failed asset requests",
+      "passed": true
+    }
+  ],
+  "consoleErrors": [],
+  "failedRequests": []
+}

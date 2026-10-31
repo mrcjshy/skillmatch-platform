@@ -91,13 +91,6 @@ terminal report may be retried without replaying review or discipline; determini
 provider idempotency keys derive from Report id, authoritative reviewed time, and
 recipient class. No delivery-tracking or outbox table is introduced for V5.
 
-This belongs as the D-001 amendment / R3 dated contract note. It is not a new
-decision id.
-
-Effective status of D-001 from this amendment onward: LOCKED as amended. The original
-11-table line above is retained for append-only provenance but is superseded by this
-amendment for application-table count.
-
 #### Clarification — V4 #16 trusted Admin report notifications (2026-09-25) — LOCKED
 
 V4 #16 supersedes only R3's historical “no report notifications” clause. Successful
@@ -830,6 +823,35 @@ Worker-location tables/RPCs are **NOT AUTHORIZED / REMOVED FROM R5E**. This amen
 does not reopen live GPS/tracking.
 
 Effective status of D-002 from this amendment onward: LOCKED as amended.
+
+#### Amendment (2026-10-14) — RF-L limited foreground location sharing — LOCKED
+
+Josh approved the Ricafort "Worker–Client location pins" design (revised design plus
+final addendum, 2026-10-14). This amendment narrows, and does not repeal, the R5E and
+D-002 exclusions above.
+
+**Permitted, and only this.** On a `confirmed` Booking, its active Worker and active
+Client may each choose to share their own current device position with the other
+participant. Sharing is opt-in for each device sharing session. Positions are collected
+only while that participant's booking location map is open and focused and the app is in
+the foreground. The server keeps the latest position per participant only (no history).
+The counterpart sees it as "live" for 45 s after the server last received it, then as
+"last shared", and not at all after 10 minutes. Stop applies to one device session; a
+separate, explicit action stops every device. Rows are deleted in the same transaction
+on Stop, when the Booking leaves `confirmed`, or when the account is deactivated. A
+scheduled job deletes expired rows. An open map renews a 60 s read lease every 30 s
+while focused. That is the only timed read, an approved exception to R5's no-polling
+rule. Lease expiry or denial clears the counterpart's coordinates.
+
+**Still not authorized.** Background or locked-phone collection; location foreground
+services; background-location permission; movement history, trails, replay, routes,
+connecting paths, directions or ETA; any Administrator view of participant location;
+any use of device position in matching or eligibility; replacing or editing the saved
+Job pin. Matching keeps Skill 50 / Location 30 / Rating 20 with barangay/city rules.
+
+**Schema.** One private infrastructure table, `private.booking_location_shares`, with no
+client grants. Its migration may be prepared and tested locally. Hosted creation needs
+separate authorization.
 
 ### D-003 — Worker-choice booking (2026-08-20) — LOCKED
 System determines and ranks eligible workers and notifies them; workers choose whether
@@ -1597,6 +1619,56 @@ landing-only React/Vite web, matching factors and scoring, acceptance semantics,
 payment architecture, AI architecture, Reports, R3B terminal privacy, and the
 12-table application schema are untouched.
 
+#### W7 — Booking-scoped chat push (2026-10-04) — LOCKED
+
+Josh's owner decision, Iteration 06 Wave 7:
+
+> Booking-scoped chat push notifications are approved. A successfully created
+> authorized booking message may trigger a privacy-preserving push notification to
+> the other booking participant. The sender must never receive a push for their own
+> message. Push delivery must not create a duplicate chat message or unnecessary
+> duplicate inbox record.
+
+**What this changes.** Only the "message notification fan-out" deferral recorded by
+BL-01C and repeated by R5 ("Message-to-notification fan-out remains deferred"). Those
+statements were true when written and stay as provenance. This entry lifts that
+deferral for Android OS push only, and narrowly:
+
+- **Scope.** Push only for the existing Booking chat. No new chat features: no read
+  receipts, typing, Presence, attachments, edit/delete/recall, or `is_read` maintenance.
+- **Transport.** It reuses the existing R5B path: pg_net, the Vault secrets, the
+  `push-notification` Edge Function, `private.user_devices` and Expo Push. There is no
+  second notification system.
+- **Records.** A chat push creates no `public.notifications` row; the message row is
+  the only record.
+- **Recipient.** The other participant of a `confirmed` Booking, and only an active
+  account. Never the sender.
+- **Copy.** Fixed lock-screen copy: "New SkillMatch message" / "Open SkillMatch to
+  view the message." Message content never leaves the database.
+- **Tap.** A tap re-authorizes the Booking from the signed-in account's own
+  RLS-scoped Booking list before the chat opens. Otherwise it falls back to the
+  inbox.
+- **Foreground.** The OS presentation of a chat push is suppressed in the foreground,
+  because the in-app message banner already presents it.
+- **Unchanged.** The confirmed-only `public.messages` SELECT/INSERT boundary
+  (BL-01C / R3B), R5 Broadcast and the R5B notification dispatch.
+- **Schema.** No new business or infrastructure table, column or policy.
+
+The R5B proof-lane exception that this work needs is recorded in docs/SECURITY.md
+("W7 — Booking chat push — 2026-10-04").
+
+#### RF-S — Two additional invalidation signals (2026-10-14) — LOCKED
+
+Josh approved the Ricafort location-pin and video-call designs. R5 gains two
+database-trigger signals. Both carry identifiers only, and clients stay receive-only:
+
+- `location_pins_changed {booking_id}` on the existing `booking:<id>:messages` topic.
+- `call_state_changed {booking_id, call_id}` on each participant's existing
+  `user:<id>:notifications` topic.
+
+There is no new topic family, no new `realtime.messages` policy, no client-originated
+Broadcast, and no Presence. A signal still means only "re-read from the server".
+
 ### D-004 — AI feature boundaries (2026-08-20) — LOCKED
 Skill gap: canonical result is a rule-based set difference — AI does not determine the
 gap; AI may convert the computed result into simple Taglish guidance, on-demand; no
@@ -1605,6 +1677,29 @@ AI may assist descriptive English only; identifiers/personal data are merged
 client-side and are not sent to external AI; fixed HTML/CSS printable PDF; no new
 table. FAQ chatbot: fixed developer-created knowledge base, simple Taglish; no
 account, booking, payment, or private user-data lookup. No new tables for AI features.
+
+#### Amendment — Client job-posting skill suggestions (2026-10-26) — LOCKED
+Josh-approved. On Post Job an active Client may tap Suggest skills to receive at most
+two suggestions from existing skill-catalog IDs, based on the description they wrote
+and/or one job photo they explicitly selected. Catalog IDs stay authoritative; AI never
+creates skills. Suggestions start unselected and change the draft only when the Client
+ticks them and taps Apply; replacing or clearing already-chosen skills needs a second
+confirmation. Manual skill choice is always available. AI never submits a Job, creates
+a Booking, runs or alters matching, or sets price, schedule, location, scope or
+diagnosis.
+
+Sent to the provider: the written description, if any, and the one selected photo
+re-encoded to a bounded PNG without metadata. With no description, a fixed app-written
+line accompanies the photo in the request only and is never stored or posted. Names,
+contact details, addresses, coordinates and account, Booking, payment and rating data
+are not request fields. AI explanations are display-only. Existing quota, kill switch,
+authentication and role checks apply. No new tables.
+
+Description help is fixed developer-written presets only; provider-written description
+text needs a separate amendment. This amendment does not authorise AI-controlled
+matching, automatic posting, new providers or other AI features. Activation for real
+users also requires the Privacy Policy update with a consent-version bump, verified
+non-training (paid-tier) provider terms and verified hosted compatibility.
 
 ### D-005 — Security function split + INVOKER guard (2026-08-20) — LOCKED
 Helper functions are SECURITY DEFINER; the users column guard is SECURITY INVOKER.
@@ -1701,6 +1796,28 @@ landing/information-only runtime.
 This is implementation evidence for the existing locked decision. It creates no new
 architecture decision and no new decision id.
 
+#### Amendment (2026-10-14) — RF-A separate Administrator web console — LOCKED
+
+Josh approved the Ricafort Admin-web design. Worker and Client stay native-only. The
+native app keeps its full Administrator interface. The public landing site stays
+landing-only, with no Supabase client and no sign-in.
+
+A separate Administrator web console in `admin-web/`, with its own build and its own
+origin, may authenticate **existing** active administrators only. It has no signup and
+no role assignment (D-006). It holds only the Supabase URL and the publishable key, and
+never a service-role key or provider secret. It acts only through the existing
+administrator-checked RPCs and Edge Functions. It adds no business logic and no
+privilege beyond native Admin. ID images are viewed only through short-lived signed
+URLs. Short URLs limit link reuse; they do not stop an authorized administrator from
+saving or capturing an image. A denied action (42501) triggers a role re-check. The
+console signs out only if the account is no longer an active administrator. Ordinary
+sign-out is browser-local; signing out on all devices is a separate, labelled action.
+GAP-001 and GAP-003 (D-008) stay out of scope.
+
+**Open owner risk decision (not decided here).** Administrator MFA is not enforced on
+web or native, and `private.is_admin()` does not require AAL2. Whether to defer MFA,
+with the residual risk recorded, or enforce it is still Josh's decision.
+
 ### D-010 — V4 Worker avatar and registration email OTP (2026-09-29) — LOCKED
 
 V4 #4 is an optional, user-facing Worker profile avatar. It is separate from
@@ -1718,3 +1835,32 @@ authoritative session from OTP verification. Existing password recovery stays
 an email-link flow. V4 #6 supplies version-controlled SkillMatch signup and
 recovery templates, while SMTP credentials and hosted Auth/template activation
 remain separately authorized hosted configuration.
+
+### D-011 — Booking-scoped video calling (2026-10-14) — LOCKED
+
+Josh approved the Ricafort video-calling design (revised design plus final addendum).
+
+**Scope.** One-to-one calls only, between the active Worker and active Client of a
+`confirmed` Booking, and only while the call screen is open and the app is in the
+foreground. No recording, no public or shareable links, no Administrator joining, no
+screen sharing, no data channel, no background calling service.
+
+**Authority.** Call state lives in a private infrastructure table,
+`private.booking_calls`, with no client grants. It is changed only through
+service-role RPCs called from Edge Functions. LiveKit Cloud is a candidate media
+provider: it carries audio and video only. Provider webhooks and queued pg_net requests
+are hints, never proof that a provider action succeeded.
+
+**Three separate authentication boundaries:**
+- `booking-call`: the signed-in participant's JWT.
+- `booking-call-reconcile`: a Vault-held scheduler secret.
+- `livekit-webhook`: the provider's signed webhook.
+
+**Tokens.** Short-lived and limited to one room and one identity. They may publish
+camera and microphone only, with data publication disabled. They are revoked through
+the provider when a call ends; room deletion is a separate step. Cleanup references
+are kept until provider-confirmed cleanup, or until an owner-visible failed-cleanup
+state.
+
+**Not yet authorized.** Provider account creation and spending, hosted creation of the
+table, scheduler activation, and native builds each need their own approval.

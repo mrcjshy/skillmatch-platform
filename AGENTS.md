@@ -9,6 +9,9 @@ which exists and is under active implementation; role-based routing; Android pri
 the shared Supabase backend (Postgres, RLS, Auth). The React/Vite web application in this
 repository is limited to the public landing/information site: it carries no operational
 role interface, no sign-in, no registration, and no Supabase runtime client.
+The one exception is the separate Administrator web console in `admin-web/`
+(D-009 amendment RF-A, 2026-10-14). It is its own build and origin, for existing
+administrators only, and the landing site still never imports it or a Supabase client.
 This file is the canonical instruction set for all coding agents
 working in this repository; read it at the start of every task.
 

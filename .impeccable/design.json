@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-30T16:58:10.829Z",
+  "title": "Design System: SkillMatch public website",
+  "extensions": {
+    "colorMeta": {
+      "page": {
+        "role": "neutral",
+        "displayName": "Warm ivory"
+      },
+      "ink": {
+        "role": "secondary",
+        "displayName": "Ink green"
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Muted green"
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Terracotta"
+      },
+      "accent-hover": {
+        "role": "primary",
+        "displayName": "Deep terracotta"
+      },
+      "peach": {
+        "role": "secondary",
+        "displayName": "Peach"
+      },
+      "sage": {
+        "role": "secondary",
+        "displayName": "Sage"
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Warm rule"
+      },
+      "button-text": {
+        "role": "neutral",
+        "displayName": "Button cream"
+      },
+      "light": {
+        "role": "neutral",
+        "displayName": "Light cream"
+      },
+      "light-hover": {
+        "role": "neutral",
+        "displayName": "Warm light cream"
+      },
+      "dark-focus": {
+        "role": "neutral",
+        "displayName": "Pale focus"
+      },
+      "client-surface": {
+        "role": "secondary",
+        "displayName": "Client peach"
+      },
+      "steps-surface": {
+        "role": "neutral",
+        "displayName": "Steps ivory"
+      },
+      "tools-surface": {
+        "role": "secondary",
+        "displayName": "Tools green"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero heading; responsive sizes are recorded in DESIGN.md."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Standard section headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Role-explanation heading."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default explanatory text, capped at 70ch."
+      },
+      "lead": {
+        "displayName": "Lead",
+        "purpose": "Hero introduction, capped at 455px."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Small primary button and role-tab text."
+      }
+    },
+    "shadows": [
+      {
+        "name": "phone",
+        "value": "0 20px 35px -16px #28372f4a",
+        "purpose": "Recurring phone-shell depth; ordinary cards are flat."
+      }
+    ],
+    "motion": [
+      {
+        "name": "button-background",
+        "value": "background-color 0.2s",
+        "purpose": "Primary and light button hover feedback."
+      },
+      {
+        "name": "hero-entrance",
+        "value": "1.05s expo.out",
+        "purpose": "Single GSAP timeline; disc scale from 0.92 at 0s, Worker y 22/rotation -3 at 0.08s, Client y 32/rotation 3 at 0.2s, note y 12 at 0.32s. Only with prefers-reduced-motion: no-preference."
+      },
+      {
+        "name": "preview-change",
+        "value": "0.3s easeOut; x: 12 to 0",
+        "purpose": "Framer Motion preview changes; reduced motion disables the initial offset."
+      },
+      {
+        "name": "faq-icon",
+        "value": "0.2s; rotation: 0 to 45deg",
+        "purpose": "Open-answer indicator; duration is zero with reduced motion."
+      },
+      {
+        "name": "anchor-scroll",
+        "value": "smooth; scroll-padding-top: 98px",
+        "purpose": "Native anchor scrolling; auto with reduced motion."
+      },
+      {
+        "name": "focus-ring",
+        "value": "3px solid; outline-offset: 5px",
+        "purpose": "Terracotta globally; pale cream in matching and download sections."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-desktop-max",
+        "value": "1150px"
+      },
+      {
+        "name": "mobile-navigation-max",
+        "value": "899px"
+      },
+      {
+        "name": "desktop-navigation-min",
+        "value": "900px"
+      },
+      {
+        "name": "stacked-layout-max",
+        "value": "639px"
+      },
+      {
+        "name": "narrow-phone-max",
+        "value": "359px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Terracotta anchor action with an inline Lucide arrow.",
+      "html": "<a class=\"ds-primary\" href=\"#download\">Get the app <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M7 7h10v10M7 17 17 7\"/></svg></a>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;gap:22px;min-height:54px;padding:14px 24px;border:0;border-radius:8px;font-family:var(--font-sans,'DM Sans Variable',sans-serif);font-size:16px;font-weight:600;line-height:1.4;transition:background-color .2s;cursor:pointer;background:var(--color-accent,#af452e);color:#fffaf3;text-decoration:none}.ds-primary:hover{background:#943720}.ds-primary:focus-visible{outline:3px solid var(--color-accent,#af452e);outline-offset:5px}@media(prefers-reduced-motion:reduce){.ds-primary{transition-duration:0s}}"
+    },
+    {
+      "name": "Small primary button",
+      "kind": "button",
+      "refersTo": "button-small",
+      "description": "Compact header download anchor.",
+      "html": "<a class=\"ds-small\" href=\"#download\">Get the app <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M7 7h10v10M7 17 17 7\"/></svg></a>",
+      "css": ".ds-small{display:inline-flex;align-items:center;justify-content:center;gap:22px;min-height:54px;padding:14px 24px;border:0;border-radius:8px;font-family:var(--font-sans,'DM Sans Variable',sans-serif);font-size:16px;font-weight:600;line-height:1.4;transition:background-color .2s;cursor:pointer;min-height:44px;padding:11px 18px;font-size:14px;gap:18px;background:var(--color-accent,#af452e);color:#fffaf3;text-decoration:none}.ds-small:hover{background:#943720}.ds-small:focus-visible{outline:3px solid var(--color-accent,#af452e);outline-offset:5px}@media(prefers-reduced-motion:reduce){.ds-small{transition-duration:0s}}"
+    },
+    {
+      "name": "Light download button",
+      "kind": "button",
+      "refersTo": "button-light",
+      "description": "Current unavailable-download state, with source hover styling retained for the enabled variant.",
+      "html": "<button class=\"ds-light\" disabled>Download coming soon</button>",
+      "css": ".ds-light{display:inline-flex;align-items:center;justify-content:center;gap:22px;min-height:54px;padding:14px 24px;border:0;border-radius:8px;font-family:var(--font-sans,'DM Sans Variable',sans-serif);font-size:16px;font-weight:600;line-height:1.4;transition:background-color .2s;cursor:pointer;color:var(--color-accent,#af452e);background:#fff8ed}.ds-light:hover{background:#ffe5d5}.ds-light:disabled{background:#fff8ed;color:#813822;cursor:default}.ds-light:focus-visible{outline:3px solid #fff4d9;outline-offset:5px}@media(prefers-reduced-motion:reduce){.ds-light{transition-duration:0s}}"
+    },
+    {
+      "name": "Text link",
+      "kind": "button",
+      "refersTo": "text-link",
+      "description": "Underlined-on-hover secondary anchor with 44px minimum height.",
+      "html": "<a class=\"ds-link\" href=\"#how-it-works\">See how it works <svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M7 7h10v10M7 17 17 7\"/></svg></a>",
+      "css": ".ds-link{display:inline-flex;align-items:center;gap:12px;min-height:44px;font-family:var(--font-sans,'DM Sans Variable',sans-serif);font-size:14px;font-weight:600;color:var(--color-ink,#233d35);text-decoration:none;text-underline-offset:5px}.ds-link:hover{text-decoration:underline}.ds-link:focus-visible{outline:3px solid var(--color-accent,#af452e);outline-offset:5px}"
+    },
+    {
+      "name": "Desktop section navigation",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Four page anchors; full sticky-header and responsive menu behavior lives in the application.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Main navigation\"><a href=\"#experience\">The app</a><a href=\"#how-it-works\">How it works</a><a href=\"#about\">About</a><a href=\"#faq\">FAQs</a></nav>",
+      "css": ".ds-nav{display:flex;flex-wrap:wrap;gap:30px;background:var(--color-page,#faf8f3);color:var(--color-ink,#233d35);font:14px var(--font-sans,'DM Sans Variable',sans-serif)}.ds-nav a{padding-block:12px;color:inherit;text-decoration:none}.ds-nav a:hover{color:var(--color-accent,#af452e)}.ds-nav a:focus-visible{outline:3px solid var(--color-accent,#af452e);outline-offset:5px}"
+    },
+    {
+      "name": "Role tabs",
+      "kind": "custom",
+      "refersTo": "role-tab-selected",
+      "description": "Static visual sample of Worker selection; application supplies tab keyboard behavior and panel updates.",
+      "html": "<div class=\"ds-tabs\" role=\"group\" aria-label=\"Role-tab appearance\"><button aria-pressed=\"true\">For Workers</button><button aria-pressed=\"false\">For Clients</button></div>",
+      "css": ".ds-tabs{display:inline-flex;border:1px solid #c7ccc0;border-radius:8px;padding:5px;gap:4px}.ds-tabs button{padding:10px 28px;border-radius:5px;border:0;background:transparent;color:var(--color-ink,#233d35);min-height:46px;font:600 14px var(--font-sans,'DM Sans Variable',sans-serif);cursor:pointer}.ds-tabs button[aria-pressed=true]{background:var(--color-ink,#233d35);color:var(--color-page,#faf8f3)}.ds-tabs button:focus-visible{outline:3px solid var(--color-accent,#af452e);outline-offset:5px}"
+    },
+    {
+      "name": "Gallery arrow",
+      "kind": "button",
+      "refersTo": "gallery-control",
+      "description": "Circular previous/next control with a pale hover fill.",
+      "html": "<button class=\"ds-gallery\" aria-label=\"Next app preview\"><svg width=\"19\" height=\"19\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M5 12h14m-7-7 7 7-7 7\"/></svg></button>",
+      "css": ".ds-gallery{width:44px;height:44px;border:1px solid #abb6a4;border-radius:50%;display:grid;place-items:center;background:transparent;color:var(--color-ink,#233d35);cursor:pointer}.ds-gallery:hover{background:var(--color-page,#faf8f3)}.ds-gallery:focus-visible{outline:3px solid var(--color-accent,#af452e);outline-offset:5px}"
+    },
+    {
+      "name": "Support-tool card",
+      "kind": "card",
+      "refersTo": "tool-card",
+      "description": "Text portion of the flat resume card; the full page pairs it with a replaceable phone preview.",
+      "html": "<article class=\"ds-card\"><h3>A little help telling<br>your work story.</h3><p>The resume builder brings profile details, skills, and portfolio information into a printable resume.</p><span>Resume builder</span></article>",
+      "css": ".ds-card{border-radius:var(--radius,16px);padding:32px;background:#f1dece;color:var(--color-ink,#233d35);max-width:350px;font-family:var(--font-sans,'DM Sans Variable',sans-serif)}.ds-card h3{margin:0;font-family:var(--font-display,'Manrope Variable',sans-serif);font-size:27px;font-weight:650;line-height:1.25;letter-spacing:-.025em}.ds-card p{font-size:14px;line-height:1.65;margin:18px 0 0;color:#535b4d}.ds-card span{display:block;font-size:11px;font-weight:600;margin-top:28px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Useful skills belong close to home.",
+    "overview": "The implemented website pairs warm ivory, terracotta, and ink green with generous editorial spacing. Large Manrope headings establish the hierarchy; DM Sans carries the explanations and controls. Flat color fields organize the page, while paired phone illustrations introduce the Worker and Client perspectives.\n\nThis is a source-based record of the first public website visual pass, not a design specification for the native app. The direction comes from `docs/website-visual-brief.md`; implemented values come from `src/index.css`, `src/components/website/`, and `src/effects/useLandingMotion.js`. Copy and replaceable assets live in `src/content/website.js`. `PRODUCT.md` provides the product and accessibility constraints. Source remains authoritative when this document needs refreshing.",
+    "keyCharacteristics": [
+      "Warm neutral canvas with terracotta actions and green text.",
+      "Broad compositions, thin dividing rules, and flat tonal surfaces.",
+      "Rounded phone previews with explicit placeholder disclosures.",
+      "A role switch that updates both explanation and preview.",
+      "Native scrolling with restrained, reduced-motion-aware animation."
+    ],
+    "rules": [],
+    "dos": [
+      "Do use the shared warm palette, self-hosted type pairing, and existing section-container rhythm.",
+      "Do preserve visible focus, tab keyboard navigation, meaningful labels, and reduced-motion behavior.",
+      "Do keep missing screenshots, brand artwork, and QR artwork replaceable and explicitly identified.",
+      "Do update this record and its sidecar when the implemented visual system changes."
+    ],
+    "donts": [
+      "Don't present the phone illustrations as actual app screenshots or an approved mobile redesign.",
+      "Don't imply a working download, store listing, or scannable QR while those assets are unavailable.",
+      "Don't place essential explanations solely inside animation or miniature placeholder labels.",
+      "Don't introduce an invented tonal scale, form system, or interaction state into this source-based record."
+    ]
+  }
+}

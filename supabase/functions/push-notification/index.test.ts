@@ -1,8 +1,11 @@
 import {
+  buildChatExpoMessages,
   buildExpoMessages,
   handleRequest,
+  type MessagePushTarget,
   notificationTitle,
   parseNotificationId,
+  parsePushRequest,
   timingSafeEqual,
   type PushTarget,
 } from "./index.ts";
@@ -211,6 +214,135 @@ Deno.test("provider failure is sanitized and does not throw secrets", async () =
   if (text.includes(SECRET) || text.includes(EXPO) || text.includes("ExponentPushToken")) {
     throw new Error("response leaked a secret or token");
   }
+});
+
+// ---------- W7 booking chat push ----------
+
+const MID = "22222222-2222-4222-8222-222222222222";
+const BID = "33333333-3333-4333-8333-333333333333";
+
+const chatTarget: MessagePushTarget = {
+  message_id: MID,
+  booking_id: BID,
+  expo_push_token: "ExponentPushToken[recipient]",
+};
+
+Deno.test("notification pushes use the versioned SkillMatch channel", () => {
+  const built = buildExpoMessages([oneTarget]);
+  if (built[0].channelId !== "skillmatch_alerts_v1") {
+    throw new Error(`expected skillmatch_alerts_v1, got ${built[0].channelId}`);
+  }
+});
+
+Deno.test("every notification type pushes at high priority with a titled alert", () => {
+  // Normal priority lets Android hold the alert while the phone idles.
+  for (const type of ["booking_request", "booking_confirmed", "booking_cancelled", "booking_completed",
+    "no_show_strike", "account_suspended", "payment_received", "worker_verified", "report_submitted"]) {
+    const built = buildExpoMessages([{ ...oneTarget, notification_type: type }]);
+    if (built[0].priority !== "high") throw new Error(`${type} priority ${built[0].priority}`);
+    if (built[0].title === "SkillMatch") throw new Error(`${type} has no title`);
+  }
+});
+
+Deno.test("message_id body resolves chat targets through the message RPC", async () => {
+  let rpcName = "";
+  let rpcArgs: Record<string, unknown> = {};
+  let messages: Array<Record<string, unknown>> = [];
+  const res = await handleRequest(post({ message_id: MID }), {
+    env: env(),
+    adminRpc: async (fn, args) => {
+      rpcName = fn;
+      rpcArgs = args;
+      return { data: [chatTarget], error: null };
+    },
+    fetchImpl: (async (_url, init) => {
+      messages = JSON.parse(String(init?.body));
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch,
+  });
+  const got = await read(res);
+  if (got.status !== 200 || got.body.delivered !== 1) {
+    throw new Error(`expected delivered 1, got ${JSON.stringify(got)}`);
+  }
+  if (rpcName !== "get_message_push_targets") throw new Error(`wrong RPC ${rpcName}`);
+  if (JSON.stringify(rpcArgs) !== JSON.stringify({ p_message_id: MID })) {
+    throw new Error(`wrong RPC args ${JSON.stringify(rpcArgs)}`);
+  }
+  const m = messages[0];
+  if (m.to !== "ExponentPushToken[recipient]") throw new Error("token not from DB");
+  if (m.title !== "New SkillMatch message") throw new Error(`title ${m.title}`);
+  if (m.body !== "Open SkillMatch to view the message.") throw new Error(`body ${m.body}`);
+  if (m.channelId !== "skillmatch_alerts_v1") throw new Error(`channel ${m.channelId}`);
+  if (m.priority !== "high") throw new Error(`priority ${m.priority}`);
+  if (JSON.stringify(m.data) !== JSON.stringify({ kind: "message", booking_id: BID })) {
+    throw new Error(`data must be kind + booking_id only, got ${JSON.stringify(m.data)}`);
+  }
+});
+
+Deno.test("chat push copy is fixed and never carries message content", () => {
+  const built = buildChatExpoMessages([chatTarget]);
+  const text = JSON.stringify(built);
+  if (text.includes(MID)) throw new Error("message id must not be sent to the device");
+  if (Object.keys(built[0]).sort().join(",") !== "body,channelId,data,priority,sound,title,to") {
+    throw new Error(`unexpected keys ${Object.keys(built[0]).join(",")}`);
+  }
+});
+
+Deno.test("message_id with no targets is a safe no-op", async () => {
+  let called = false;
+  const res = await handleRequest(post({ message_id: MID }), {
+    env: env(),
+    adminRpc: async () => ({ data: [], error: null }),
+    fetchImpl: (async () => {
+      called = true;
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch,
+  });
+  const got = await read(res);
+  if (got.status !== 200 || got.body.delivered !== 0 || called) {
+    throw new Error(`expected no-op, got ${JSON.stringify(got)} called=${called}`);
+  }
+});
+
+Deno.test("both ids together are 400", async () => {
+  const res = await handleRequest(post({ message_id: MID, notification_id: NID }), {
+    env: env(),
+    adminRpc: async () => ({ data: [], error: null }),
+  });
+  const got = await read(res);
+  if (got.status !== 400) throw new Error(`expected 400, got ${got.status}`);
+});
+
+Deno.test("message_id with caller copy or recipient fields is 400", async () => {
+  for (const body of [
+    { message_id: MID, body: "leak" },
+    { message_id: MID, user_id: "x" },
+    { message_id: "not-a-uuid" },
+  ]) {
+    const res = await handleRequest(post(body), {
+      env: env(),
+      adminRpc: async () => ({ data: [], error: null }),
+    });
+    const got = await read(res);
+    if (got.status !== 400) throw new Error(`expected 400 for ${JSON.stringify(body)}, got ${got.status}`);
+  }
+});
+
+Deno.test("message_id still requires the webhook secret", async () => {
+  const res = await handleRequest(
+    post({ message_id: MID }, { "x-skillmatch-push-secret": "wrong" }),
+    { env: env(), adminRpc: async () => ({ data: [chatTarget], error: null }) },
+  );
+  const got = await read(res);
+  if (got.status !== 401) throw new Error(`expected 401, got ${got.status}`);
+});
+
+Deno.test("parsePushRequest distinguishes the two id kinds", () => {
+  const n = parsePushRequest({ notification_id: NID });
+  const m = parsePushRequest({ message_id: MID });
+  if (!n.ok || n.kind !== "notification" || n.id !== NID) throw new Error("notification parse");
+  if (!m.ok || m.kind !== "message" || m.id !== MID) throw new Error("message parse");
+  if (parsePushRequest({}).ok) throw new Error("empty must fail");
 });
 
 Deno.test("parseNotificationId helpers", () => {

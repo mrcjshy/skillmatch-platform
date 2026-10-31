@@ -6,6 +6,133 @@ Two layered gates protect data: RLS policies (row-level) AND column guard trigge
 (column-level). They compose — a trigger ALLOW never bypasses RLS, and passing RLS
 never bypasses a trigger; both must pass for a write to land.
 
+## Native session and account enforcement — S1 synchronization (2026-10-06)
+
+This records accepted W4 session-security behavior in the owner-approved C3R
+Mobile candidate, with the bounded C3V native smoke as a separate evidence layer.
+It documents existing implementation; it adds no backend or application behavior.
+The React/Vite public landing site has no operational Auth/session client.
+
+### Authentication, account resolution, and access gates
+
+Supabase Auth is the authentication authority. Mobile `SessionProvider` restores
+the SDK session, observes Auth changes, and distinguishes restoration pending,
+restoration error, and signed-out states. The native client persists its Auth
+session through AsyncStorage; token auto-refresh runs in the foreground and stops
+in the background. Persisted authentication is separate from permission to enter
+a SkillMatch role interface.
+
+`AccountProvider` reads and validates the authenticated user's own `public.users`
+row, including matching identity, role, and boolean `is_active`. An existing row
+wins over registration metadata. Only a genuinely missing row may be bootstrapped
+from validated Worker/Client registration input, through existing backend guards,
+followed by a mandatory authoritative re-read. Public registration supplies no
+Administrator or service privilege. Worker, Client, and Admin correspond to stored
+roles `worker`, `client`, and `administrator`. Ordinary users cannot change their
+protected `role` or `is_active`; protected Worker verification/discipline fields
+and privileged Admin actions remain controlled by existing backend rules.
+
+The root navigator derives access from session and account state, never a default
+role. Restoration/account pending states expose no operational route tree;
+account errors stay outside role routes on existing verification/failure paths.
+A resolved `is_active = false` account enters the blocked screen with Sign out,
+without role routes. Active Workers/Clients require current legal consent; Worker
+entry requires the authoritative verified onboarding state. Provisioned active
+Administrators bypass those consent/Worker-identity gates. Recovery remains a
+separate guarded surface, not ordinary sign-in authority.
+
+These are native access/presentation gates. Account enforcement depends on fresh
+authoritative resolution; it does not establish immediate detection of every
+remote suspension or revoke a Supabase Auth session merely because `is_active`
+changed. RLS, column guards, and each trusted RPC's authorization remain
+authoritative for database access. Existing RPC exceptions and registered gaps
+below remain unchanged; this is not a universal active-account database policy.
+
+### Accepted W4 Client private state and session lifetime
+
+Every session replacement advances a synchronous local revision. Account results
+are bound to the current session/revision/retry and masked while revalidation is
+pending; stale account or consent completions cannot authorize a successor.
+Captured Client operation guards reject obsolete revisions before further work.
+
+One memory-only Client Post Job draft owner sits inside `AccountProvider`, above
+protected-route removal. It retains fields, ordered photo references, wizard step,
+and permitted created-Job receipts/handoff privately, without disk persistence or
+a cross-session draft cache. The memory owner adds no service loader or backend
+watcher. Operational Client jobs, screens, readers, and mutations stay below the
+account/consent gate. Unresolved authority hides the retained draft and prevents
+new guarded Client work; retention itself grants no access.
+
+Retention across refresh requires a valid matching configured issuer, UUID subject
+matching the SDK user, UUID `session_id`, and unchanged local termination epoch.
+Bounded local decoding supplies correlation only: it verifies no signature or
+server revocation and replaces neither Auth nor account/consent/RLS authorization.
+User-ID equality, a `TOKEN_REFRESHED` event, or token-byte equality alone is
+insufficient. `SIGNED_OUT`, a null session, and recovery entry terminate the prior
+lifetime synchronously, including batched same-account sign-out/sign-in. Changed
+or ambiguous/malformed session identity starts a fresh lifetime without the old
+draft; restoration failure also clears prior retention.
+
+A current authoritative non-Client or inactive row terminates Client draft
+retention before downstream reads. Invalid/failed current consent and bootstrap
+failures other than `account_fetch_failed` also terminate it. A retryable
+`account_fetch_failed` may retain inaccessible memory only within the uninterrupted
+classified lifetime; fresh successful account/consent revalidation is required
+before access resumes. Later success cannot restore a terminated predecessor.
+Authority and visible receipt settlement use committed lifecycle transitions;
+speculative renders do not publish authority or settle retained receipts.
+
+Suspension permanently cancels the old posting continuation, even if the same
+Client later revalidates. An already-dispatched create/upload may still finish;
+local invalidation does not undo it. Only the original operation in the same
+retained lifetime may record a narrow created-Job receipt. Pending authority
+permits no continuation uploads, list refresh, navigation, visible reset, or Home
+handoff. An unresolved/indeterminate creation remains blocked against duplicate
+creation. After successful revalidation, a known created receipt is reconciled
+once without recreating the Job or restarting canceled uploads; unknown photo
+completion stays explicit. Terminated-lifetime replies cannot attach to successor
+drafts, and old finalizers cannot release newer operations. Existing photo-slot,
+`upsert: false`, reconciliation, and server authorization rules remain unchanged.
+This supplies no backend idempotency or rollback guarantee.
+
+### Sign-out and push-device infrastructure bookkeeping
+
+`signOutCurrentUser` clears pending push navigation, attempts best-effort
+deactivation of the remembered current device token, then calls Supabase Auth
+sign-out and clears the remembered token. Device-deactivation failure does not
+block the Auth sign-out attempt; an Auth failure is reported to the caller.
+Local lifetime invalidation follows Auth/session events described above, not a
+promise that pressing Sign out always succeeds or instantly revokes every bearer.
+
+After an authenticated active role resolves and its protected layout mounts,
+Android push registration may run automatically. It requires the matching
+resolved active account, an Android runtime outside Expo Go, notification
+permission, project configuration, and an available Expo push token. Registration
+failure is nonfatal. `register_my_push_device` derives its owner from `auth.uid()`
+and checks an active account server-side; normal startup may insert or refresh
+the device registration in private infrastructure state.
+
+This is push/device bookkeeping, not a Job, Booking, payment, message, Rating,
+Report, or other business transaction. Auth refresh and device registration can
+write hosted infrastructure/session state without a business action. C3V recorded
+zero business mutations performed while explicitly permitting automatic
+push/session bookkeeping; its exact bookkeeping write count was not audited.
+It therefore does not establish zero total hosted writes.
+
+### Evidence and retained limitations
+
+The accepted W4 correction/documentation candidate and current C3R provider,
+navigation, submission, sign-out, and push sources support these implementation
+claims. C3R's 1,809/1,809 passing tests, TypeScript PASS, and ESLint PASS are
+carried-forward source/offline evidence, not tests rerun by S1. C3V passed bounded
+existing-session Worker/Client/Admin smoke and Client local draft navigation;
+Admin required warm-launcher recovery from an unclassified startup failure.
+That smoke does not prove the full adversarial refresh, suspension, recovery,
+race, or dispatched-create matrix, clean cold starts, release APKs, or physical
+devices. S1 performs documentation checks only, with no live Auth/backend/device
+verification. These remain capstone implementation claims, not production security
+certification; PayMongo remains TEST mode.
+
 ## V4 location security amendment — 2026-09-24 — APPROVED / NOT YET IMPLEMENTED
 
 The Josh-approved “V4 authoritative Job pin and eligible-Worker exact location”
@@ -1493,6 +1620,113 @@ notification-inbox freshness; background tap routing; no duplicate persistent
 notification row; sign-out token deactivation; cold-start routing/session restoration
 correction; exact fixture cleanup. Expo Go is not valid OS-push proof.
 
+**Scoped exception (2026-10-04, Josh, Iteration 06 Wave 7).** The "Do not schedule
+another R5B proof lane" rule above stays in force. Josh authorized one bounded
+exception, and only for W7 chat push and the new `skillmatch_alerts_v1` channel
+with the Tugma sound. It covers a targeted general-push regression (foreground,
+background receipt, tap routing, no obvious duplicate, and the channel change not
+breaking the path) plus the new chat-push proof. It does not authorize a rerun of
+the historical R5B campaign, and it does not remove the rule for future work. See
+"W7 — Booking chat push — 2026-10-04" below.
+
+### W7 — Booking chat push — 2026-10-04
+
+**Status: HOSTED DEPLOYED + DEVELOPMENT-BUILD RUNTIME PROVEN, WITH LIMITATIONS (below).
+Not committed.** Owner
+decision: docs/DECISIONS.md, "W7 — Booking-scoped chat push". Migration:
+`supabase/migrations/20261004120000_w7_chat_push_dispatch.sql`.
+
+**Dispatch.** `AFTER INSERT` on `public.messages` runs
+`private.w7_dispatch_message_inserted()`. It is postgres-owned, trigger-only,
+`SECURITY DEFINER` with an empty search path, and EXECUTE is revoked from PUBLIC,
+anon, authenticated and service_role. It reads the existing Vault secrets
+`r5b_push_endpoint` / `r5b_push_webhook_secret` and makes a pg_net POST of
+`{message_id}` only. Like R5B it fails open: missing Vault config or a pg_net error
+never rolls back the message.
+
+**Recipient authority.** `public.get_message_push_targets(uuid)` is a STABLE
+`SECURITY DEFINER` function with EXECUTE granted to service_role only. It resolves
+the Booking participant who is not the sender:
+- The Booking must still be `confirmed`.
+- The recipient must be `is_active`.
+- Only the recipient's active `private.user_devices` rows are returned.
+
+A sender who is neither participant resolves to no row. The projection is
+`message_id, booking_id, expo_push_token`, with no content, contact or profile
+column.
+
+**Edge Function.** `push-notification` accepts exactly one identifier key,
+`notification_id` or `message_id`; anything else is a 400. The shared-secret check
+is unchanged. A chat push carries:
+- the fixed title "New SkillMatch message" and body "Open SkillMatch to view the
+  message.";
+- `data = {kind: 'message', booking_id}`;
+- `channelId = skillmatch_alerts_v1` and `priority = high`.
+
+Notification pushes keep their R5B copy and data, and now name the same
+`skillmatch_alerts_v1` channel.
+
+**Unchanged.**
+- The `public.messages` RLS: confirmed-participant SELECT/INSERT, sender equals
+  `auth.uid()`, non-blank content and length ≤ 2000.
+- The R5 Broadcast triggers.
+- The R5B notification trigger and target RPC.
+- `private.emit_notification`.
+
+No `public.notifications` row is written per chat message. The public table count
+stays 13, and no private table is added.
+
+**Native.**
+- **Payload trust.** The payload is a routing hint only.
+- **Tap.** A tap waits for session plus active account readiness, then re-reads the
+  role's own Booking list (`list_my_worker_bookings` / `list_my_client_bookings`).
+  It opens `/{role}/chat?bookingId=` only when that Booking is present and
+  `confirmed`; otherwise it opens the role inbox.
+- **Foreground.** The handler suppresses OS presentation of a chat push, because
+  the in-app banner presents it. General notifications keep their banner and sound.
+- **Channel.** `skillmatch_alerts_v1` is created at HIGH importance with the bundled
+  `skillmatch_tugma.wav`, and the legacy `default` channel is deleted.
+
+**Local evidence.** On a local migration-up through `20261004120000`,
+`supabase/tests/w7_chat_push_dispatch.sql` passed 28/28 (rollback-only). The
+unchanged suites passed: R5B 30/30, V4 #16 49/49, FT-05 #18 25/25, R6 27/27.
+Edge Function Deno tests passed 21/21 (13 existing + 8 new), and `deno check` was
+clean.
+
+**Hosted (2026-10-04, `uzbntxxwayqfkusyhodl`).**
+- **Migration.** A `db push --dry-run` listed only `20261004120000`, which was then
+  applied once. History went from 47 to 48 rows.
+- **Catalog check.** W7, R5 and R5B triggers are present. The target RPC is granted
+  to service_role only, the dispatch function has no EXECUTE grants, the public table
+  count is 13, and both Vault secret names exist.
+- **Edge Function.** `push-notification` was redeployed alone, v1 → v2, with
+  `verify_jwt=false`. Before the deploy, the hosted v1 source matched the repo's
+  pre-W7 source. No other function changed version. An unsigned POST returns 401.
+
+**Runtime.** EAS development build `b7e3f7ce-6866-4bea-837f-8eba381024a1` on the
+Worker/Client AVDs; Expo Go was not used. Five hosted Booking messages were sent
+(Booking `265e6e96-49ac-4bf7-9a7c-d265e3786b67`), each stored once. No
+`public.notifications` row was created.
+
+| Behaviour | Result |
+|---|---|
+| Background receipt (Worker → Client, Client → Worker) | Proven |
+| Outside-app receipt, process dead but not force-stopped (both directions) | Proven |
+| Foreground: in-app banner, OS notification suppressed (FCM receive observed) | Proven |
+| Privacy copy on the system notification | Proven |
+| Channel `skillmatch_alerts_v1`, HIGH importance, Tugma sound URI | Proven |
+| Warm tap opens the authorized Booking chat | Proven |
+| No self-push (server target re-check, sender device) | Proven |
+| One FCM receive per dispatch on each device | Proven |
+| General-push regression: an existing notification replayed through v2; background receipt and inbox tap | Proven |
+
+**Not proven.**
+- **Cold-start tap routing on the development client.** JS received a null last
+  response, and the app opened safely on the role Home. Proof needs a release-type
+  build (R7).
+- **Audible Tugma.** Android started RingtonePlayer playback of the channel sound,
+  but the owner heard nothing from the emulator. A physical-device listen is pending.
+
 ### R3 user reports security boundary — 2026-09-10
 
 **Status: R3 — CLOSED + HOSTED PROVEN + NATIVE RUNTIME PROVEN.** The 2026-09-10
@@ -2041,9 +2275,14 @@ matching input. `verify_worker()` remains the sole writer of `is_verified` /
 
 **Consent.** `private.user_consents` (`user_id` PK/FK to `public.users`). RLS on;
 `anon` / `authenticated` / `service_role` / `PUBLIC` hold no table privileges.
-Locked versions `2026-09-v1` / `2026-09-v1` via
-`private.current_legal_terms_version()` and
-`private.current_legal_privacy_version()`. RPCs:
+Current versions: Terms `2026-09-v1` via `private.current_legal_terms_version()`,
+Privacy `2026-10-v1` via `private.current_legal_privacy_version()` (CAI-01 Client
+skill-suggestion disclosure). During the CAI-01 transition `record_my_consent`
+accepts Privacy `2026-10-v1` or `2026-09-v1` through
+`private.is_accepted_legal_privacy_version(text)` (no API-role EXECUTE), so
+installed builds still record consent; the row stores the version the caller
+acknowledged. A held Phase B replaces only that helper to retire `2026-09-v1`.
+RPCs:
 `public.record_my_consent(text,text)` and `public.get_my_consent()`. Own-user only.
 Unsigned or missing `public.users` row is `42501` for both `record_my_consent` and
 `get_my_consent`. Wrong version is `22023`.
@@ -2051,7 +2290,10 @@ Same-version repeats keep original timestamps. Consent is not stored in Auth
 metadata. Corrective migration
 `20260918160000_v3_db_05_get_my_consent_users_row.sql` aligns `get_my_consent` to
 that unsigned-or-missing-`public.users`-row `42501` behavior. It was local-only
-at V3-1 and is hosted as of V3-5.
+at V3-1 and is hosted as of V3-5. Function-only migration
+`20261026090000_cai01_privacy_version_transition.sql` (no table, row or grant
+change) was applied to hosted on 2026-10-26 02:26Z with owner approval (history 54);
+rollback `ROLLBACK_cai01_phase_a.sql` is kept with the CAI-01 release evidence.
 
 **Worker valid ID.** `private.worker_id_documents` plus private Storage bucket
 `worker-identity` (`public=false`, 5 MiB, jpeg/png/webp). Path
@@ -2889,3 +3131,225 @@ not been executed locally because Docker was unavailable; static review is not
 SQL runtime evidence. Later hosted/runtime evidence, if any, must be recorded as
 a separate truth layer and must not retroactively be described as local SQL
 execution.
+
+## Ricafort Mobile/backend continuation — 2026-10-15 (local source evidence)
+
+The inherited RF location/call migrations remain unapplied in this continuation.
+Docker-dependent RF01/RF02/RF03 and concurrency SQL tests are BLOCKED. No hosted
+settings, scheduler, Vault, Edge deployment or provider operation was performed.
+
+Mobile location collection now requires explicit opt-in and an actually loaded,
+focused map in the foreground. Session Stop and Stop-all are separate. The reader
+measures its authorization lease conservatively from request start, clears pins
+on expiry/background, and invalidates all outstanding reads on any same-activation
+denial. An old response cannot restore coordinates after denial. Failed Stop is
+visible/retryable while mounted; retry state is not durable across unmount, so the
+disclosed last-pin expiry is the fallback for a failed remote Stop. Collection is
+removed locally immediately. No routes, trails, ETA, or GPS-based matching added.
+
+The call endpoint no longer mints/returns a caller token while ringing/start.
+Only authorized accepted accept/rejoin results yield client join credentials.
+Mobile push carries identifiers and rechecks authoritative status before routing;
+it never accepts automatically. Native SDK loading is lazy. Locally acquired media
+tracks are owned before publication and stopped on background/leave, with explicit
+rejoin after returning. End races, away/back and terminal identity replacement have
+mocked lifecycle regressions. Provider cleanup remains authoritative server work;
+client local shutdown is not proof of provider cleanup. No recording, groups,
+public rooms or Admin joining were added.
+
+Current local evidence: 2,535/2,535 Mobile Vitest tests in 130 files, TypeScript and
+ESLint pass; 48/48 mocked-provider Deno tests pass. Focused independent source review
+reported seven issues, now fixed and spot-checked. These results do not establish
+native compatibility, device capture-stop timing, SQL runtime, real provider
+behavior or full E2E. Admin-web ownership is still unreleased to the coordinator;
+its inherited report is not independently verified. Detailed source inventory,
+test-layer boundaries, approvals and paired APK/backend recovery requirements:
+`docs/RICAFORT-CONTINUATION-20261015.md` and
+`docs/RICAFORT-FEATURE-INVENTORY-20261015.md`.
+
+### Follow-up: lifecycle-safe pending location Stop — 2026-10-15
+
+The map-unmount retry limitation above is superseded by an app-root process-memory
+cleanup queue. Pending entries contain identifiers and retry/status metadata only,
+never coordinates or persisted sharing sessions. Navigation removes GPS locally
+while pending cleanup survives. Four-attempt bounded retries require foreground
+and the current owning account lifetime; each RPC pins that account's token and
+uses a ten-second timeout. Sign-out/account change cannot dispatch cleanup as a
+different user. Expiry and failures remain explicitly unconfirmed. A pending
+Stop-all continues blocking new local sharing after expiry until explicitly
+reissued and confirmed; exact-session retries never target a replacement share.
+Process termination still discards memory-only cleanup; no session auto-resumes.
+
+Current Mobile checks: 2,546/2,546 tests in 133 files, TypeScript/ESLint/diff pass.
+Independent read-only source review found no material defects and released its
+ownership. No SQL, provider, hosted or native/device evidence is added by these
+tests. See `docs/RICAFORT-STOP-HARDENING-20261015.md` for exact changes, tests,
+retained limitations and supplemental paired source recovery.
+
+### Follow-up: Administrator web detail lifetime — 2026-10-15
+
+The later `recovery-20261015-admin-web/README.md` explicitly releases Admin-web
+ownership and records independent verification; the earlier unreleased-ownership
+statement above is historical. The integrated checkpoint preserves those bytes.
+
+Administrator route changes now remount the routed page, clearing detail data,
+drafts and confirmation dialogs before another Worker or report can become the
+action target. Pending signed-image responses are invalidated when an ID review
+completes or its view closes; a late response cannot reopen the reviewed image.
+The existing 120-second signing limit, RPC authorization and local/global logout
+boundaries remain unchanged. Three browser regressions reproduced the defects
+before the fixes; the updated mocked-backend browser suite passes 14/14. Synthetic
+fixtures establish UI behavior only, not real identity-image access, hosted
+authorization, email delivery or deployment success.
+
+The separately approved EAS Android development compatibility build
+`88b527b1-3849-47ce-8edd-505db8116dbf` completed on 2026-10-15 with the pinned
+Expo 57.0.16, React Native 0.86.2 and LiveKit dependencies. The reviewed archive
+excludes local tests/evidence, environment files and internal documentation.
+The saved APK is debuggable, includes WebRTC/MapLibre native libraries and requests
+no background-location permission. It does include `SYSTEM_ALERT_WINDOW` despite
+the main config's blocked-permission entry; this debug artifact does not establish
+the release permission set. APK SHA256:
+`dc0b33500be9bfb16378f777ec1bdcfcd406586c9279199a2aec49f53ef19ee6`.
+After Josh's separate device approval, this exact APK updated Admin emulator-5554
+with `adb install -r`, without clearing app data. An offline, isolated fixture used
+the pinned dependencies and an exact copy of `src/lib/native-video-call.ts`.
+LiveKit, MapLibre and Expo Location loaded; a local-only map style and synthetic
+marker rendered; foreground GPS returned the injected synthetic test coordinate.
+The production media helper acquired an emulated camera track while publication
+was held at a mocked boundary. Explicit Stop and backgrounding both ended Android's
+running camera operation; the native track reported `ended`, with no restart on
+return. Microphone capture was disabled, Room connect/publication were mocked and
+the fixture did not load accounts or booking services. These checks do not prove
+audio, real-call transport, actual booking sharing or physical-device behavior.
+The temporary fixture connection/server were removed and the emulator returned
+to its development launcher. The ordinary Metro server and rollback APK remain.
+
+### RF integration deployment — 2026-10-15
+
+Josh separately authorized controlled backend/provider/Admin integration, including
+one separate Hobby Vercel project and personally configured free LiveKit credentials.
+This record supersedes the earlier unapplied/blocked RF status only for the execution
+described here. It does not add native runtime or real media evidence.
+
+**Bootstrap and local validation.** An unmodified empty migration replay failed at
+`20260916120000_v2c_db_01_skill_catalog_expansion.sql`: four fixed baseline skill rows
+are missing from the original bootstrap. That original defect is preserved and is
+**not repaired**. A retained external, local-only prerequisite fixture supplies those
+four rows between migrations 25 and 26. It was never uploaded or applied to hosted.
+`scripts/validate-rf-local.py` makes the contained replay reproducible with the cached
+Supabase PostgreSQL 17.6 image, Docker network `none`, no published ports, no restart
+policy, and no host database/firewall changes. No inadequately contained database was
+started. A second rehearsal used the actual captured pre-RF hosted application and
+platform schema, matched extension versions and synthetic local catalog/bucket rows.
+Both layers remain fixture-assisted evidence, not a clean repository-bootstrap claim.
+
+The final hosted-schema rehearsal passed RF01 48/48, RF02 66/66, RF03 7/7,
+termination concurrency 20/20, and the existing ID-review regression 27/27. Deno
+mocked-provider checks passed 55/55. Test repairs account for Realtime's generated
+message `id`, transaction-stable timestamps and actual baseline matching-function
+hashes, and now raise on failed SQL assertions. No matching implementation changed.
+
+**Concrete call fixes.** Accept/rejoin acquire Booking and ordered User locks before
+the Call lock, eliminating the reproduced termination lock inversion. Join-token
+lifetimes start before the authorization request, so a delayed accepted response
+cannot extend credentials past the recorded revocation cutoff. Late provisioning
+reopens cleanup; a provisioning-attempt fence prevents stale cleanup confirmation.
+Malformed provider HTTP-success JSON and malformed room/participant lists remain
+unknown instead of proving absence. Valid omitted protobuf collections remain empty.
+
+**Hosted database.** The verified intended project is
+`uzbntxxwayqfkusyhodl` / `livelihood-matching-platform`. Exactly these reviewed
+migrations were applied once, after the security and recovery rehearsals:
+
+- `20261015090000_rf01_location_pins.sql`
+- `20261015100000_rf02_booking_calls.sql`
+- `20261015110000_rf03_verify_worker_revoke.sql`
+
+History advanced 49 to 52 records; all original version/name/statement hashes stayed
+unchanged. The already-deployed FT03 version `20261006083722`, absent from the local
+migration directory, was recovered verbatim from existing hosted history into the
+isolated deployment package only. No history repair, reset or old migration rewrite
+occurred. The dry run selected exactly the three RF migrations. The 13 public table
+names stayed unchanged; only the two private RF infrastructure tables were added.
+Both have RLS and no direct anon/authenticated/service-role table grants. RF02 public
+wrappers remain service-role-only. `verify_worker` lost authenticated execution;
+its body, owner and configuration stayed unchanged. The reviewed ID-approval path
+retains its existing authenticated grant and server-side Administrator checks.
+
+**Recovery.** `supabase/recovery/rf-disable-runtime.sql` is a locally rehearsed,
+compatible fail-closed recovery path. It retains rows, tables, migration history,
+existing Admin RPCs and RF03 hardening; it refuses shares or unconfirmed call cleanup.
+It uses the owner-checked cron API, not direct `cron.job` updates. Before hosted use,
+the operator must disable the three call Edge entry points, stop dispatch, drain
+in-flight Edge/provider/DB work and independently confirm provider cleanup. Revoking
+execution does not cancel an already-entered definer function. Negative-guard and
+clean recovery rehearsals passed; no hosted recovery was executed.
+
+**Deployed Edge and configuration.** Downloaded deployed sources match the local
+reviewed files after newline normalization:
+
+- `booking-call` v1, JWT verification enabled.
+- `booking-call-reconcile` v1, JWT verification disabled; dedicated dispatch secret.
+- `livekit-webhook` v1, JWT verification disabled; provider JWT/body signature.
+- `report-outcome-email` v19, JWT verification enabled; exact-origin CORS wrapper.
+
+The owner's `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` remain server-side;
+their values were not retrieved or printed. A new independent maintenance secret was
+configured as `RF02_CALL_RECONCILE_SECRET` and Vault `rf02_call_reconcile_secret`, with
+Vault endpoint `https://uzbntxxwayqfkusyhodl.supabase.co/functions/v1/booking-call-reconcile`.
+Existing provider/signing secrets were not replaced. Both RF cron jobs are active.
+An authenticated maintenance tick returned HTTP 200 with all counts zero; missing or
+wrong secrets returned 401, and an authenticated invalid body returned 400. A real
+Vault-to-pg_net request returned 200 without timeout/errors; recent cron executions
+succeeded. These are maintenance transport checks with zero calls, not RoomService,
+token revocation or media execution. Unsigned webhook POST returned 401. The owner
+reports the webhook is saved and reports a successful test, but the server log
+records three LiveKitCloud POST responses as 401 (latest 14:55:29 Manila). There is
+no server-confirmed 200 delivery. The owner confirms the same signing key is selected;
+secure re-entry of that existing key/secret pair and another provider test are pending.
+No authorization bypass or speculative application fix was made.
+
+**Separate Admin deployment.** Verified OWNER access to `Josh's projects`,
+`team_y1kkayGqcVXXiIwooqD36HLe`, on Hobby preceded creation of `skillmatch-admin`
+(`prj_Np4hskHz8t1vZbPZqNjAelQYuoOO`). Current local `admin-web` source was curated,
+hash-checked and deployed without a Git integration. The exact production deployment
+`dpl_2VC6bvqAebsLHUjXzpr7uq3Ac4Uo` was staged, then promoted without rebuilding to its
+actual assigned stable origin, **https://skillmatch-admin-peach.vercel.app**. No other
+Vercel project or public landing deployment was changed. Its only two configured
+application variables are the verified Supabase URL and existing publishable key.
+No LiveKit or privileged Supabase credential was included in the Admin bundle.
+
+`ADMIN_WEB_ORIGINS` is exactly that stable HTTPS origin. Real preflight returned 204
+and that exact origin; an unrelated origin returned 403. Unauthenticated email and
+participant requests returned 401; anonymous direct RF02 RPC execution returned
+42501. Admin `/`, `/sign-in` and `/workers` serve the same SPA with HTTP 200, matching
+security headers and the exact-project CSP. Served JavaScript matches the tested
+local build and contains no embedded privileged key. Browser rendering and signed-in
+Admin/backend behavior remain **NOT RUN** because no browser connection is available.
+Report-email delivery is blocked by missing `RESEND_API_KEY` and
+`REPORT_OUTCOME_EMAIL_FROM`; no email was sent or new email provider provisioned.
+
+Advisor changes are the two intentionally policy-free private tables and five
+participant-authorized RF01 definer RPCs, offset by the revoked legacy verifier.
+The existing public-schema pg_net and leaked-password warnings remain unchanged.
+No broad grants or unrelated advisor remediation was performed.
+
+Evidence, schema/source snapshots, migration hashes, original failure logs, deployed
+bundle hashes and HTTP results are retained under
+`C:\Users\JOSH\Documents\SkillMatch-releases\20261021-ricafort-candidate\integration-20261015`.
+Execution policy rejected the final transient-secret cleanup and isolated-container
+stop command with only `blocked by policy`; no approval-review mechanism was exposed.
+The current-user-restricted DPAPI backup and network-none task database therefore
+remain pending owner cleanup/stop. Earlier transient plaintext env/SQL files were
+already removed after successful configuration. Evidence volumes were not deleted.
+
+The isolated microphone task stays closed with track/session lifecycle evidence only;
+active recording/release and real two-way audio stay unverified. The main-app launch
+rejection remains an execution-environment blocker with an unknown reason. No launch
+workaround was attempted. Actual call-screen and U1–U5 runtime checks, real booking
+location sharing, real calls, physical devices and the comprehensive real-user E2E
+campaign remain **NOT RUN**, pending permitted launch and authorized device/account
+actions. No new EAS build, dependency upgrade, business table, Git write, manuscript
+change or real ID/selfie transfer occurred. Administrator MFA remains the existing
+open owner decision; automated ID authenticity remains separately scoped.

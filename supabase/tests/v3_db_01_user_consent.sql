@@ -123,8 +123,8 @@ BEGIN
   PERFORM pg_temp.pass(1, 'locked terms version is 2026-09-v1',
     private.current_legal_terms_version() = '2026-09-v1',
     private.current_legal_terms_version());
-  PERFORM pg_temp.pass(2, 'locked privacy version is 2026-09-v1',
-    private.current_legal_privacy_version() = '2026-09-v1',
+  PERFORM pg_temp.pass(2, 'locked privacy version is 2026-10-v1',
+    private.current_legal_privacy_version() = '2026-10-v1',
     private.current_legal_privacy_version());
 
   -- 3 anon record denied
@@ -132,7 +132,7 @@ BEGIN
     PERFORM set_config('request.jwt.claims', '', true);
     PERFORM set_config('request.jwt.claim.sub', '', true);
     PERFORM set_config('role', 'anon', true);
-    PERFORM public.record_my_consent('2026-09-v1', '2026-09-v1');
+    PERFORM public.record_my_consent('2026-09-v1', '2026-10-v1');
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(3, 'anon record_my_consent denied', false, 'succeeded');
   EXCEPTION WHEN OTHERS THEN
@@ -159,7 +159,7 @@ BEGIN
   BEGIN
     PERFORM pg_temp.jwt(auth_only);
     SET LOCAL ROLE authenticated;
-    PERFORM public.record_my_consent('2026-09-v1', '2026-09-v1');
+    PERFORM public.record_my_consent('2026-09-v1', '2026-10-v1');
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(5, 'auth-only without users row denied', false, 'succeeded');
   EXCEPTION WHEN OTHERS THEN
@@ -187,10 +187,10 @@ BEGIN
     SET LOCAL ROLE authenticated;
     SELECT c.user_id, c.terms_version, c.privacy_version, c.terms_accepted_at
       INTO v_uid, v_terms, v_privacy, v_at1
-    FROM public.record_my_consent('2026-09-v1', '2026-09-v1') AS c;
+    FROM public.record_my_consent('2026-09-v1', '2026-10-v1') AS c;
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(7, 'own record_my_consent persists versions',
-      v_uid = user_own AND v_terms = '2026-09-v1' AND v_privacy = '2026-09-v1'
+      v_uid = user_own AND v_terms = '2026-09-v1' AND v_privacy = '2026-10-v1'
         AND v_at1 IS NOT NULL,
       coalesce(v_uid::text, 'null') || ' ' || coalesce(v_terms, ''));
   EXCEPTION WHEN OTHERS THEN
@@ -208,7 +208,7 @@ BEGIN
     FROM public.get_my_consent() AS c;
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(8, 'own get_my_consent returns recorded row',
-      v_terms = '2026-09-v1' AND v_privacy = '2026-09-v1' AND v_at1 IS NOT NULL,
+      v_terms = '2026-09-v1' AND v_privacy = '2026-10-v1' AND v_at1 IS NOT NULL,
       coalesce(v_terms, 'null'));
   EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.clear_jwt();
@@ -223,7 +223,7 @@ BEGIN
     SET LOCAL ROLE authenticated;
     SELECT c.terms_accepted_at, c.privacy_acknowledged_at
       INTO v_at2, v_privacy
-    FROM public.record_my_consent('2026-09-v1', '2026-09-v1') AS c;
+    FROM public.record_my_consent('2026-09-v1', '2026-10-v1') AS c;
     SELECT c.terms_accepted_at INTO v_at2
     FROM public.get_my_consent() AS c;
     PERFORM pg_temp.clear_jwt();
@@ -254,7 +254,7 @@ BEGIN
   BEGIN
     PERFORM pg_temp.jwt(user_other);
     SET LOCAL ROLE authenticated;
-    PERFORM public.record_my_consent('2026-09-v1', '2026-09-v1');
+    PERFORM public.record_my_consent('2026-09-v1', '2026-10-v1');
     PERFORM pg_temp.clear_jwt();
   EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.clear_jwt();

@@ -14,6 +14,15 @@
 
 BEGIN;
 
+-- The installed baseline can include later matching migrations. This regression
+-- asserts those exact definitions survive ID review; it does not pin an older
+-- deployment's formatting or silently replace the current matching model.
+CREATE TEMP TABLE v3_db3_matching_baseline AS
+SELECT signature, md5(pg_get_functiondef(signature::regprocedure)) AS fingerprint
+FROM (VALUES ('private.compute_job_matches(uuid)'),
+             ('public.match_workers_for_job(uuid)'),
+             ('public.list_my_job_opportunities()')) AS f(signature);
+
 CREATE TEMP TABLE v3_db3_results (
   n      int,
   name   text,
@@ -383,20 +392,36 @@ BEGIN
       SQLSTATE = 'SM409', SQLSTATE || ' ' || SQLERRM);
   END;
 
-  -- 17 verify_worker itself is still SM409 once verified (sole writer remains)
+  -- 17 verify_worker itself is still SM409 once verified (sole writer remains).
+  -- RF-03 revoked client EXECUTE, so the body guard is exercised through the
+  -- owner path (postgres) with the Administrator's claims, the same context
+  -- approve_worker_identity gives it.
+  BEGIN
+    PERFORM pg_temp.jwt(admin_user);
+    PERFORM set_config('role', 'postgres', true);
+    PERFORM public.verify_worker(worker_own);
+    PERFORM pg_temp.clear_jwt();
+    PERFORM pg_temp.pass(17, 'verify_worker body after approval SM409', false, 'succeeded');
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM pg_temp.clear_jwt();
+    PERFORM pg_temp.pass(17, 'verify_worker body after approval SM409',
+      SQLSTATE = 'SM409', SQLSTATE || ' ' || SQLERRM);
+  END;
+
+  -- 17b RF-03: an active Administrator can no longer call verify_worker directly
   BEGIN
     PERFORM pg_temp.jwt(admin_user);
     SET LOCAL ROLE authenticated;
     PERFORM public.verify_worker(worker_own);
     PERFORM pg_temp.clear_jwt();
-    PERFORM pg_temp.pass(17, 'direct verify_worker after approval SM409', false, 'succeeded');
+    PERFORM pg_temp.pass(17, 'RF-03 Admin direct verify_worker 42501', false, 'succeeded');
   EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.clear_jwt();
-    PERFORM pg_temp.pass(17, 'direct verify_worker after approval SM409',
-      SQLSTATE = 'SM409', SQLSTATE || ' ' || SQLERRM);
+    PERFORM pg_temp.pass(17, 'RF-03 Admin direct verify_worker 42501',
+      SQLSTATE = '42501', SQLSTATE || ' ' || SQLERRM);
   END;
 
-  -- 18 Worker cannot self-verify
+  -- 18 Worker cannot self-verify (privilege layer, then body guard)
   BEGIN
     PERFORM pg_temp.jwt(worker_own);
     SET LOCAL ROLE authenticated;
@@ -406,6 +431,17 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.clear_jwt();
     PERFORM pg_temp.pass(18, 'Worker verify_worker 42501 preserved',
+      SQLSTATE = '42501', SQLSTATE || ' ' || SQLERRM);
+  END;
+  BEGIN
+    PERFORM pg_temp.jwt(worker_own);
+    PERFORM set_config('role', 'postgres', true);
+    PERFORM public.verify_worker(worker_own);
+    PERFORM pg_temp.clear_jwt();
+    PERFORM pg_temp.pass(18, 'Worker claims: verify_worker body guard 42501', false, 'succeeded');
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM pg_temp.clear_jwt();
+    PERFORM pg_temp.pass(18, 'Worker claims: verify_worker body guard 42501',
       SQLSTATE = '42501', SQLSTATE || ' ' || SQLERRM);
   END;
 
@@ -455,15 +491,15 @@ BEGIN
   SELECT md5(pg_get_functiondef('private.compute_job_matches(uuid)'::regprocedure))
     INTO v_hash;
   PERFORM pg_temp.pass(21, 'compute_job_matches fingerprint unchanged',
-    v_hash = 'b9b686e6b0b9a87ee8618b5600b1ed62', v_hash);
+    v_hash = (SELECT fingerprint FROM v3_db3_matching_baseline WHERE signature = 'private.compute_job_matches(uuid)'), v_hash);
   SELECT md5(pg_get_functiondef('public.match_workers_for_job(uuid)'::regprocedure))
     INTO v_hash;
   PERFORM pg_temp.pass(22, 'match_workers_for_job fingerprint unchanged',
-    v_hash = '9239550ea9da726a3002bb3503d12f73', v_hash);
+    v_hash = (SELECT fingerprint FROM v3_db3_matching_baseline WHERE signature = 'public.match_workers_for_job(uuid)'), v_hash);
   SELECT md5(pg_get_functiondef('public.list_my_job_opportunities()'::regprocedure))
     INTO v_hash;
   PERFORM pg_temp.pass(23, 'list_my_job_opportunities fingerprint unchanged',
-    v_hash = 'a135ec4ddac213df3f3ef147f93e0fc9', v_hash);
+    v_hash = (SELECT fingerprint FROM v3_db3_matching_baseline WHERE signature = 'public.list_my_job_opportunities()'), v_hash);
 
   -- 22 grants
   PERFORM pg_temp.pass(24, 'anon EXECUTE approve_worker_identity revoked',

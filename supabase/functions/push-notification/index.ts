@@ -6,8 +6,12 @@
 // not a signed-in user. The boundary is x-skillmatch-push-secret
 // compared to R5B_PUSH_WEBHOOK_SECRET.
 //
-// The request body is an identifier only. Recipients, tokens, and
-// copy are re-read from public.get_notification_push_targets.
+// The request body is an identifier only: {notification_id} from the
+// R5B notifications trigger, or {message_id} from the W7 booking-chat
+// trigger. Recipients, tokens, and copy are re-read server-side from
+// public.get_notification_push_targets / public.get_message_push_targets.
+// Chat pushes carry fixed, content-free copy; the message body never
+// leaves the database.
 //
 // Push is a delivery hint. Provider failure must not imply a
 // business rollback — the notification row already exists.
@@ -15,6 +19,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+/** Versioned Android channel (custom Tugma sound). Never reuse an older id. */
+export const ANDROID_CHANNEL_ID = "skillmatch_alerts_v1";
+export const CHAT_PUSH_TITLE = "New SkillMatch message";
+export const CHAT_PUSH_BODY = "Open SkillMatch to view the message.";
 const PROVIDER_TIMEOUT_MS = 15_000;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -28,6 +36,7 @@ const TYPE_TITLES: Record<string, string> = {
   account_suspended: "Account update",
   payment_received: "Payment received",
   worker_verified: "Verification update",
+  report_submitted: "Report update",
 };
 
 export type PushTarget = {
@@ -37,12 +46,21 @@ export type PushTarget = {
   expo_push_token: string;
 };
 
+export type MessagePushTarget = {
+  message_id: string;
+  booking_id: string;
+  expo_push_token: string;
+};
+
 export type HandlerOverrides = {
   fetchImpl?: typeof fetch;
   adminRpc?: (
     fn: string,
     args: Record<string, unknown>,
-  ) => Promise<{ data: PushTarget[] | null; error: { message?: string } | null }>;
+  ) => Promise<{
+    data: Array<PushTarget | MessagePushTarget> | null;
+    error: { message?: string } | null;
+  }>;
   env?: Record<string, string | undefined>;
 };
 
@@ -103,18 +121,28 @@ export function notificationTitle(type: string): string {
 export function parseNotificationId(payload: unknown):
   | { ok: true; notificationId: string }
   | { ok: false; reason: string } {
+  const parsed = parsePushRequest(payload);
+  if (!parsed.ok) return parsed;
+  if (parsed.kind !== "notification") return { ok: false, reason: "fields" };
+  return { ok: true, notificationId: parsed.id };
+}
+
+/** Exactly one identifier key, either notification_id or message_id. */
+export function parsePushRequest(payload: unknown):
+  | { ok: true; kind: "notification" | "message"; id: string }
+  | { ok: false; reason: string } {
   if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
     return { ok: false, reason: "shape" };
   }
   const keys = Object.keys(payload as Record<string, unknown>);
-  if (keys.length !== 1 || keys[0] !== "notification_id") {
+  if (keys.length !== 1 || (keys[0] !== "notification_id" && keys[0] !== "message_id")) {
     return { ok: false, reason: "fields" };
   }
-  const id = (payload as { notification_id?: unknown }).notification_id;
+  const id = (payload as Record<string, unknown>)[keys[0]];
   if (typeof id !== "string" || !UUID_RE.test(id)) {
     return { ok: false, reason: "uuid" };
   }
-  return { ok: true, notificationId: id };
+  return { ok: true, kind: keys[0] === "message_id" ? "message" : "notification", id };
 }
 
 export function buildExpoMessages(targets: PushTarget[]): Array<{
@@ -122,6 +150,8 @@ export function buildExpoMessages(targets: PushTarget[]): Array<{
   sound: "default";
   title: string;
   body: string;
+  channelId: typeof ANDROID_CHANNEL_ID;
+  priority: "high";
   data: { notification_id: string };
 }> {
   return targets.map((row) => ({
@@ -129,7 +159,34 @@ export function buildExpoMessages(targets: PushTarget[]): Array<{
     sound: "default" as const,
     title: notificationTitle(row.notification_type),
     body: row.notification_message,
+    channelId: ANDROID_CHANNEL_ID,
+    // Normal FCM priority may be deferred while the phone idles; every alert is time-sensitive.
+    priority: "high" as const,
     data: { notification_id: row.notification_id },
+  }));
+}
+
+/**
+ * Lock-screen-safe chat push. Fixed copy only; the device receives the
+ * Booking id as an untrusted routing hint that the app re-authorizes.
+ */
+export function buildChatExpoMessages(targets: MessagePushTarget[]): Array<{
+  to: string;
+  sound: "default";
+  title: string;
+  body: string;
+  channelId: typeof ANDROID_CHANNEL_ID;
+  priority: "high";
+  data: { kind: "message"; booking_id: string };
+}> {
+  return targets.map((row) => ({
+    to: row.expo_push_token,
+    sound: "default" as const,
+    title: CHAT_PUSH_TITLE,
+    body: CHAT_PUSH_BODY,
+    channelId: ANDROID_CHANNEL_ID,
+    priority: "high" as const,
+    data: { kind: "message" as const, booking_id: row.booking_id },
   }));
 }
 
@@ -188,9 +245,9 @@ export async function handleRequest(
     return json(400, { error: { code: "invalid_request", message: "malformed body" } });
   }
 
-  const parsed = parseNotificationId(payload);
+  const parsed = parsePushRequest(payload);
   if (!parsed.ok) {
-    return json(400, { error: { code: "invalid_request", message: "invalid notification_id" } });
+    return json(400, { error: { code: "invalid_request", message: "invalid push identifier" } });
   }
 
   if (!overrides.adminRpc && (!supabaseUrl || !supabaseServerKey)) {
@@ -199,7 +256,7 @@ export async function handleRequest(
     });
   }
 
-  let targets: PushTarget[] = [];
+  let targets: Array<PushTarget | MessagePushTarget> = [];
   try {
     const rpc = overrides.adminRpc
       ?? (async (fn: string, args: Record<string, unknown>) => {
@@ -208,9 +265,9 @@ export async function handleRequest(
         });
         return await admin.rpc(fn, args);
       });
-    const { data, error } = await rpc("get_notification_push_targets", {
-      p_notification_id: parsed.notificationId,
-    });
+    const { data, error } = parsed.kind === "message"
+      ? await rpc("get_message_push_targets", { p_message_id: parsed.id })
+      : await rpc("get_notification_push_targets", { p_notification_id: parsed.id });
     if (error) {
       return json(503, { error: { code: "unavailable", message: "try again" } });
     }
@@ -229,7 +286,9 @@ export async function handleRequest(
     });
   }
 
-  const messages = buildExpoMessages(targets);
+  const messages = parsed.kind === "message"
+    ? buildChatExpoMessages(targets as MessagePushTarget[])
+    : buildExpoMessages(targets as PushTarget[]);
   const fetchImpl = overrides.fetchImpl ?? fetch;
   try {
     const controller = new AbortController();

@@ -1,9 +1,58 @@
 import {
   buildIdempotencyKey,
   buildOutcomeEmails,
+  corsHeaders,
   deriveOutcomeEvent,
+  handleWithCors,
   parseRequestPayload,
 } from "./index.ts";
+
+const ADMIN_ORIGIN = "https://admin.skillmatch.example";
+
+Deno.test("RF-A CORS: only listed Admin-web origins are echoed", () => {
+  const allowed = corsHeaders(ADMIN_ORIGIN, `${ADMIN_ORIGIN}, http://localhost:5174`);
+  if (allowed["access-control-allow-origin"] !== ADMIN_ORIGIN) throw new Error("listed origin not allowed");
+  if (allowed.vary !== "Origin") throw new Error("missing Vary: Origin");
+  if (!allowed["access-control-allow-headers"]?.includes("authorization")) throw new Error("authorization header not allowed");
+  for (const [origin, list] of [
+    ["https://evil.example", ADMIN_ORIGIN],
+    [ADMIN_ORIGIN, undefined],
+    [ADMIN_ORIGIN, ""],
+    [null, ADMIN_ORIGIN],
+    ["*", "*"],
+  ] as const) {
+    const headers = corsHeaders(origin, list);
+    if ("access-control-allow-origin" in headers) throw new Error(`origin ${origin} allowed with ${list}`);
+  }
+});
+
+Deno.test("RF-A CORS: preflight answers without running the handler", async () => {
+  Deno.env.set("ADMIN_WEB_ORIGINS", ADMIN_ORIGIN);
+  try {
+    const ok = await handleWithCors(new Request("http://fn/report-outcome-email", {
+      method: "OPTIONS", headers: { origin: ADMIN_ORIGIN },
+    }));
+    if (ok.status !== 204 || ok.headers.get("access-control-allow-origin") !== ADMIN_ORIGIN) {
+      throw new Error(`allowed preflight returned ${ok.status}`);
+    }
+    const denied = await handleWithCors(new Request("http://fn/report-outcome-email", {
+      method: "OPTIONS", headers: { origin: "https://evil.example" },
+    }));
+    if (denied.status !== 403 || denied.headers.has("access-control-allow-origin")) {
+      throw new Error(`foreign preflight returned ${denied.status}`);
+    }
+    // A POST still goes through the unchanged authorization path (no bearer => 401),
+    // and the listed origin is echoed so the browser can read the denial.
+    const post = await handleWithCors(new Request("http://fn/report-outcome-email", {
+      method: "POST", headers: { origin: ADMIN_ORIGIN }, body: JSON.stringify({ report_id: reportId }),
+    }));
+    if (post.status !== 401 || post.headers.get("access-control-allow-origin") !== ADMIN_ORIGIN) {
+      throw new Error(`POST returned ${post.status}`);
+    }
+  } finally {
+    Deno.env.delete("ADMIN_WEB_ORIGINS");
+  }
+});
 
 const reportId = "11111111-1111-4111-8111-111111111111";
 const reviewedAt = "2026-09-29T00:00:00Z";
