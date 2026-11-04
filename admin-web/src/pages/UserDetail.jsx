@@ -1,14 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { loadUserDetail } from '../api.js';
+import { loadModeration, loadUserDetail, setAccountBanned } from '../api.js';
 import { useAuth } from '../auth-context.js';
 import {
-  accountStatus, accountStatusExplanation, availabilityLabel, formatDateTime, isUuid, workerVerificationStatus,
+  MAX_STRIKES, MODERATION_COPY, MODERATION_REASON_MAX, accountStatus, accountStatusExplanation, availabilityLabel,
+  formatDateTime, isUuid, moderationActionCopy, normaliseModerationReason, strikeSummary, workerVerificationStatus,
 } from '../domain.js';
-import { Avatar, Chip, Facts, PageHeader, Status } from '../ui.jsx';
+import { ProfileCard } from '../ProfileCard.jsx';
+import { Avatar, Chip, ConfirmDialog, Facts, LiveNotice, PageHeader, Status } from '../ui.jsx';
 
-/** Read-only Worker/Client detail (get_admin_user_detail). No account-state control, as on native. */
+/**
+ * Worker/Client detail (get_admin_user_detail) with MOD-01 moderation (get_admin_account_moderation):
+ * no-show strikes N of 3 for Workers, the latest ban/reinstatement and one action. A ban lasts until
+ * an Administrator reinstates the account; reinstating a Worker resets their strikes to 0.
+ */
 export default function UserDetail() {
   const { handleError } = useAuth();
   const params = useParams();
@@ -16,6 +22,13 @@ export default function UserDetail() {
   const userId = isUuid(params.userId) ? params.userId : null;
   const [reload, setReload] = useState(0);
   const [state, setState] = useState({ key: null });
+  const [moderation, setModeration] = useState({ key: null });
+  const [notice, setNotice] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
+  const inFlight = useRef(false);
   const key = kind && userId ? `${kind}|${userId}|${reload}` : null;
   const title = kind === 'worker' ? 'Worker details' : kind === 'client' ? 'Client details' : 'Account details';
 
@@ -32,8 +45,53 @@ export default function UserDetail() {
           error: outcome.kind === 'denied' ? outcome.message : 'Unable to load user details. Please try again.',
         });
       });
+    loadModeration(userId)
+      .then((data) => { if (!cancelled) setModeration({ key, data, error: null }); })
+      .catch(async (e) => {
+        const outcome = await handleError(e);
+        if (cancelled || outcome.kind === 'ended') return;
+        setModeration({ key, data: null, error: outcome.kind === 'denied' ? outcome.message : MODERATION_COPY.loadFailed });
+      });
     return () => { cancelled = true; };
   }, [key, kind, userId, handleError]);
+
+  const mod = moderation.key === key ? moderation : null;
+  const banning = mod?.data?.is_active === true;
+
+  async function submit() {
+    if (inFlight.current || !mod?.data) return;
+    if (normaliseModerationReason(reason) === null) {
+      setSaveError(MODERATION_COPY.reasonRequired);
+      return;
+    }
+    inFlight.current = true;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const result = await setAccountBanned(userId, banning, reason);
+      setDialogOpen(false);
+      setReason('');
+      setNotice({
+        tone: 'success',
+        text: !result.changed ? MODERATION_COPY.unchanged
+          : banning ? MODERATION_COPY.banned
+            : kind === 'worker' ? MODERATION_COPY.reinstatedWorker : MODERATION_COPY.reinstated,
+      });
+      setReload((n) => n + 1);
+    } catch (e) {
+      const outcome = await handleError(e);
+      if (outcome.kind !== 'ended') setSaveError(outcome.kind === 'denied' ? outcome.message : moderationActionCopy(e));
+    } finally {
+      inFlight.current = false;
+      setSaving(false);
+    }
+  }
+
+  function closeDialog() {
+    if (saving) return;
+    setDialogOpen(false);
+    setSaveError(null);
+  }
 
   const back = kind === 'client' ? { to: '/clients', label: 'Clients' } : { to: '/workers', label: 'Workers' };
   const header = <PageHeader title={title} back={back} />;
@@ -61,9 +119,13 @@ export default function UserDetail() {
   const status = accountStatus(detail.is_active);
   const verification = worker ? workerVerificationStatus(worker) : null;
 
+  const remaining = MODERATION_REASON_MAX - reason.trim().length;
+  const lastAt = mod?.data?.last_action_at ? formatDateTime(mod.data.last_action_at) : null;
+
   return (
     <>
       {header}
+      <LiveNotice notice={notice} />
       <div className="card object-head">
         <Avatar name={detail.full_name} large />
         <section className="section">
@@ -79,9 +141,53 @@ export default function UserDetail() {
       <section className="section card">
         <h2>Account</h2>
         <Facts rows={[['Account status', status.label], ['Joined', formatDateTime(detail.created_at) ?? 'Not recorded']]} />
-        <p className="muted">
-          {accountStatusExplanation(detail.is_active)} Account status is shown here for review; it is not changed from this screen.
-        </p>
+        <p className="muted">{accountStatusExplanation(detail.is_active)}</p>
+      </section>
+      <ProfileCard userId={userId} />
+      <section className="section card" aria-labelledby="moderation-heading">
+        <h2 id="moderation-heading">Moderation</h2>
+        {!mod ? <Status>Loading moderation…</Status>
+          : mod.error ? (
+            <Status tone="error" action={<button type="button" className="btn btn-secondary" onClick={() => setReload((n) => n + 1)}>Retry</button>}>
+              {mod.error}
+            </Status>
+          ) : (
+            <>
+              {worker ? (
+                <div className="strike-meter" role="img" aria-label={`No-show strikes: ${strikeSummary(mod.data.strike_count)}`}>
+                  <span className="strike-label">No-show strikes</span>
+                  <strong>{strikeSummary(mod.data.strike_count)}</strong>
+                  {mod.data.strike_count !== null ? (
+                    <span className="strike-pips" aria-hidden="true">
+                      {Array.from({ length: MAX_STRIKES }, (_, i) => (
+                        <span key={i} className={i < mod.data.strike_count ? 'strike-pip on' : 'strike-pip'} />
+                      ))}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              <Facts rows={[
+                ['Last action', mod.data.last_action === null ? 'None'
+                  : `${mod.data.last_action === 'ban' ? 'Banned' : 'Reinstated'}${lastAt ? ` · ${lastAt}` : ''}`],
+                ...(mod.data.last_reason ? [['Reason', mod.data.last_reason]] : []),
+              ]} />
+              <p className="muted">
+                {banning
+                  ? worker
+                    ? `A Worker is suspended automatically at ${MAX_STRIKES} no-show strikes. A ban suspends the account now, until it is reinstated.`
+                    : 'A ban suspends the account now, until it is reinstated.'
+                  : worker
+                    ? 'This account is suspended. Reinstating it restores access and resets no-show strikes to 0.'
+                    : 'This account is suspended. Reinstating it restores access.'}
+              </p>
+              <div className="row-actions">
+                <button type="button" className={`btn ${banning ? 'btn-danger' : 'btn-primary'}`}
+                  onClick={() => { setSaveError(null); setDialogOpen(true); }}>
+                  {banning ? 'Ban account' : 'Reinstate account'}
+                </button>
+              </div>
+            </>
+          )}
       </section>
       {worker ? (
         <section className="section card">
@@ -101,6 +207,34 @@ export default function UserDetail() {
         <p className="muted">Counts are based on retained records, with no date filter.</p>
       </section>
       </div>
+      <ConfirmDialog
+        open={dialogOpen}
+        title={banning ? 'Ban this account?' : 'Reinstate this account?'}
+        body={banning
+          ? 'The account is suspended until an Administrator reinstates it. The user is notified with your reason.'
+          : worker ? 'The account is restored and no-show strikes reset to 0. The user is notified.'
+            : 'The account is restored. The user is notified.'}
+        confirmLabel={saving ? (banning ? 'Banning…' : 'Reinstating…') : banning ? 'Ban account' : 'Reinstate account'}
+        tone={banning ? 'danger' : 'primary'}
+        onConfirm={() => { void submit(); }}
+        onCancel={closeDialog}
+      >
+        <div className="field">
+          <label htmlFor="moderation-reason">Reason</label>
+          <textarea
+            id="moderation-reason"
+            rows={3}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            disabled={saving}
+            placeholder={banning ? 'Why is this account banned?' : 'Why is this account reinstated?'}
+            aria-describedby="moderation-reason-count"
+            aria-invalid={saveError ? true : undefined}
+          />
+          <p id="moderation-reason-count" className={remaining < 0 ? 'field-error' : 'muted'}>{remaining} characters left</p>
+          <div role="alert">{saveError ? <p className="notice notice-danger">{saveError}</p> : null}</div>
+        </div>
+      </ConfirmDialog>
     </>
   );
 }

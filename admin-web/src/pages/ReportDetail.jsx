@@ -33,8 +33,8 @@ const SUCCESS = new Set([REPORT_COPY.reviewSaved, REPORT_COPY.strikeSaved, REPOR
 
 /**
  * Same flow as native report-details: review_report or
- * resolve_no_show_report_with_strike, then (for a closing outcome) the
- * report-outcome-email function, then an authoritative re-read.
+ * resolve_no_show_report_with_strike, then the report-outcome-email function
+ * (every status, Under review included), then an authoritative re-read.
  */
 export default function ReportDetail() {
   const { handleError } = useAuth();
@@ -154,7 +154,8 @@ export default function ReportDetail() {
     setNotice(null);
     try {
       await reviewReport(reportId, status, adminResponse);
-      const delivered = status === 'under_review' ? true : await sendOutcomeEmail(reportId);
+      // Every review status emails the reporter, Under review included (owner, 2026-11-05).
+      const delivered = await sendOutcomeEmail(reportId);
       await refreshAfter(delivered ? REPORT_COPY.reviewSaved : REPORT_COPY.emailFailed);
     } catch (e) {
       const outcome = await handleError(e);

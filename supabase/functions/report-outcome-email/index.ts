@@ -1,9 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { gmailConfig } from "../_shared/gmail-mailer.ts";
+import { createGmailSender } from "../_shared/gmail-transport.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DISCIPLINARY_OUTCOMES = ["no_show_strike", "account_suspended"] as const;
 type DisciplinaryOutcome = typeof DISCIPLINARY_OUTCOMES[number];
-type Event = "resolved" | "dismissed" | DisciplinaryOutcome;
+/** under_review (owner 2026-11-05): the reporter hears that review has started. */
+type Event = "under_review" | "resolved" | "dismissed" | DisciplinaryOutcome;
 type Recipient = "reporter" | "reported";
 
 export type OutcomeContext = {
@@ -35,6 +38,7 @@ export function deriveOutcomeEvent(
       DISCIPLINARY_OUTCOMES.includes(disciplinaryOutcome as DisciplinaryOutcome)
     ? disciplinaryOutcome as DisciplinaryOutcome
     : null;
+  if (status === "under_review") return discipline === null ? "under_review" : null;
   if (status === "dismissed") return discipline === null ? "dismissed" : null;
   if (status === "resolved") return discipline ?? "resolved";
   return null;
@@ -49,6 +53,19 @@ export function buildIdempotencyKey(
 }
 
 export function buildOutcomeEmails(context: OutcomeContext) {
+  if (context.event === "under_review") {
+    // Still open: only the person who reported hears about it; the reported user is not told yet.
+    return [{
+      to: context.reporterEmail,
+      subject: "SkillMatch report under review",
+      text: [
+        "Your SkillMatch report is now under review by a SkillMatch Administrator. We will email you again when it is resolved or dismissed.",
+        context.bookingReference ? `Booking reference: ${context.bookingReference}.` : null,
+        context.adminResponse ? `Admin note: ${context.adminResponse}` : null,
+      ].filter(Boolean).join("\n\n"),
+      recipient: "reporter" as Recipient,
+    }];
+  }
   const status = context.event === "dismissed" ? "dismissed" : "resolved";
   const reporterText = [
     `Your SkillMatch report was ${status}.`,
@@ -107,9 +124,9 @@ export async function handleRequest(req: Request): Promise<Response> {
 
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const resendKey = Deno.env.get("RESEND_API_KEY");
-  const from = Deno.env.get("REPORT_OUTCOME_EMAIL_FROM");
-  if (!url || !serviceKey || !resendKey || !from) return json(503, { delivered: false });
+  // Gmail SMTP (owner decision 2026-11-05; see _shared/gmail-mailer.ts).
+  const mail = gmailConfig((name) => Deno.env.get(name));
+  if (!url || !serviceKey || !mail) return json(503, { delivered: false });
 
   const admin = createClient(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -179,26 +196,10 @@ export async function handleRequest(req: Request): Promise<Response> {
     strikeCount,
   };
   const messages = buildOutcomeEmails(context);
+  const send = createGmailSender(mail);
   for (const message of messages) {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${resendKey}`,
-        "content-type": "application/json",
-        "idempotency-key": buildIdempotencyKey(
-          report.id,
-          report.reviewed_at,
-          message.recipient,
-        ),
-      },
-      body: JSON.stringify({
-        from,
-        to: [message.to],
-        subject: message.subject,
-        text: message.text,
-      }),
-    });
-    if (!response.ok) return json(200, { delivered: false });
+    const result = await send({ to: message.to, subject: message.subject, text: message.text });
+    if (!result.ok) return json(200, { delivered: false });
   }
   return json(200, { delivered: true });
 }

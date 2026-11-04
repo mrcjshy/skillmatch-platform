@@ -225,6 +225,148 @@ export function accountStatusExplanation(isActive) {
     : 'This account is inactive. Signing in shows the inactive-account screen instead of the app.';
 }
 
+/* ------------------------------------------------------------------ *
+ * MOD-01 account moderation (ban / reinstate, no-show strikes)
+ * ------------------------------------------------------------------ */
+
+export const MAX_STRIKES = 3;
+export const MODERATION_REASON_MAX = 500;
+const MODERATION_READ = ['is_active', 'strike_count', 'last_action', 'last_reason', 'last_action_at'];
+const MODERATION_WRITE = ['user_id', 'is_active', 'strike_count', 'changed'];
+
+function strikes(value) {
+  if (value === null) return null;
+  if (!Number.isInteger(value) || value < 0 || value > MAX_STRIKES) throw new InvalidResponse();
+  return value;
+}
+
+function onlyRow(data) {
+  if (!Array.isArray(data) || data.length !== 1) throw new InvalidResponse();
+  return record(data[0]);
+}
+
+export function parseModeration(data) {
+  const row = onlyRow(data);
+  const action = row.last_action;
+  if (!sameKeys(row, MODERATION_READ) || typeof row.is_active !== 'boolean' ||
+      (action !== null && action !== 'ban' && action !== 'reinstate') ||
+      (row.last_reason !== null && typeof row.last_reason !== 'string') ||
+      (row.last_action_at !== null && typeof row.last_action_at !== 'string') ||
+      (action === null) !== (row.last_reason === null) || (action === null) !== (row.last_action_at === null)) {
+    throw new InvalidResponse();
+  }
+  return { ...row, strike_count: strikes(row.strike_count) };
+}
+
+export function parseModerationResult(data, targetUserId) {
+  const row = onlyRow(data);
+  if (!sameKeys(row, MODERATION_WRITE) || !isUuid(row.user_id) ||
+      row.user_id.toLowerCase() !== targetUserId.toLowerCase() ||
+      typeof row.is_active !== 'boolean' || typeof row.changed !== 'boolean') {
+    throw new InvalidResponse();
+  }
+  return { ...row, strike_count: strikes(row.strike_count) };
+}
+
+/** The trimmed reason, or null when it is empty or over the server limit. */
+export function normaliseModerationReason(reason) {
+  const trimmed = String(reason ?? '').trim();
+  return trimmed.length > 0 && trimmed.length <= MODERATION_REASON_MAX ? trimmed : null;
+}
+
+export const strikeSummary = (count) => (count === null ? 'No Worker profile' : `${count} of ${MAX_STRIKES}`);
+
+export const MODERATION_COPY = {
+  reasonRequired: `Enter a reason of 1 to ${MODERATION_REASON_MAX} characters.`,
+  unavailable: 'This account cannot be moderated.',
+  failed: 'Unable to update the account. Please try again.',
+  loadFailed: 'Unable to load moderation. Please try again.',
+  unchanged: 'No change: the account was already in that state.',
+  banned: 'Account banned. It stays suspended until an Administrator reinstates it.',
+  reinstatedWorker: 'Account reinstated. No-show strikes were reset to 0.',
+  reinstated: 'Account reinstated.',
+};
+
+/** Copy for a non-permission failure (permission is handled by the session guard). */
+export function moderationActionCopy(error) {
+  if (error?.code === 'SM409') return MODERATION_COPY.unavailable;
+  if (error?.code === '22023') return MODERATION_COPY.reasonRequired;
+  return MODERATION_COPY.failed;
+}
+
+/* ------------------------------------------------------------------ *
+ * REG-01 account profile / Worker resume (get_admin_account_profile)
+ * ------------------------------------------------------------------ */
+
+export const EDUCATION_LABELS = {
+  none: 'No formal schooling', elementary: 'Elementary', high_school: 'High school', senior_high: 'Senior high school',
+  vocational: 'Vocational / TESDA', college_undergrad: 'Some college', college_graduate: 'College graduate',
+  postgraduate: 'Postgraduate',
+};
+const PROFILE_COMMON = [
+  'user_id', 'role', 'full_name', 'first_name', 'middle_name', 'last_name', 'name_suffix', 'email', 'phone',
+  'address_street', 'address_barangay', 'address_city', 'address_province', 'client_account_type', 'business_name',
+  'profile_completed_at',
+];
+const PROFILE_WORKER = [...PROFILE_COMMON, 'birth_date', 'education_level', 'school_name', 'work_history', 'resume_completed_at', 'skills'];
+const PROFILE_NULLABLE_TEXT = ['first_name', 'middle_name', 'last_name', 'name_suffix', 'address_street', 'address_barangay',
+  'address_city', 'address_province', 'business_name', 'profile_completed_at'];
+const nullableText = (v) => v === null || typeof v === 'string';
+const nullableInt = (v) => v === null || Number.isInteger(v);
+
+export function parseAccountProfile(value, targetUserId) {
+  const row = record(value);
+  const keys = row.role === 'worker' ? PROFILE_WORKER : row.role === 'client' ? PROFILE_COMMON : null;
+  if (!keys || !sameKeys(row, keys) || !isUuid(row.user_id) || row.user_id.toLowerCase() !== targetUserId.toLowerCase() ||
+      typeof row.full_name !== 'string' || typeof row.email !== 'string' || typeof row.phone !== 'string' ||
+      !PROFILE_NULLABLE_TEXT.every((k) => nullableText(row[k])) ||
+      !(row.client_account_type === null || row.client_account_type === 'individual' || row.client_account_type === 'business')) {
+    throw new InvalidResponse();
+  }
+  if (row.role === 'worker') {
+    if (!nullableText(row.birth_date) || !(row.education_level === null || Object.hasOwn(EDUCATION_LABELS, row.education_level)) ||
+        !nullableText(row.school_name) || !nullableText(row.resume_completed_at) ||
+        !Array.isArray(row.work_history) || !Array.isArray(row.skills) ||
+        !row.work_history.every((j) => j && typeof j.employer === 'string' && typeof j.role === 'string' &&
+          Number.isInteger(j.start_year) && nullableInt(j.end_year)) ||
+        !row.skills.every((s) => s && typeof s.name === 'string' && nullableText(s.proficiency) && nullableInt(s.years))) {
+      throw new InvalidResponse();
+    }
+  }
+  return row;
+}
+
+export function formatHomeAddress(p) {
+  const parts = [p.address_street, p.address_barangay ? `Brgy. ${p.address_barangay}` : null, p.address_city, p.address_province].filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+}
+
+/** Whole years on today's Manila date; null when the date is missing or malformed. */
+export function ageOn(birthDate, today = new Date()) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(birthDate ?? '');
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const manila = new Date(today.getTime() + 8 * 3600 * 1000);
+  const [ty, tm, td] = [manila.getUTCFullYear(), manila.getUTCMonth() + 1, manila.getUTCDate()];
+  return ty - y - (tm < mo || (tm === mo && td < d) ? 1 : 0);
+}
+
+export function formatBirthDate(birthDate, today = new Date()) {
+  if (!birthDate) return null;
+  const [y, m, d] = birthDate.split('-').map(Number);
+  const label = new Intl.DateTimeFormat('en-PH', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(y, m - 1, d)));
+  const age = ageOn(birthDate, today);
+  return age === null ? label : `${label} (age ${age})`;
+}
+
+export const formatJobYears = (job) => `${job.start_year} – ${job.end_year ?? 'Present'}`;
+/** Years of experience only: skill levels (Beginner / Intermediate / Expert) are not shown (owner, 2026-11-05). */
+export function formatSkillExperience(skill) {
+  if (skill.years === null || skill.years === undefined) return 'Not provided';
+  return skill.years === 1 ? '1 year' : `${skill.years} years`;
+}
+
 export function workerVerificationStatus(worker) {
   if (!worker.has_profile) return { label: 'No profile', tone: 'neutral' };
   if (worker.is_verified === true) return { label: 'Verified', tone: 'positive' };
@@ -455,6 +597,7 @@ const NOTIFICATION_LABEL = {
   booking_completed: 'Booking completed',
   no_show_strike: 'No-show recorded',
   account_suspended: 'Account suspended',
+  account_reinstated: 'Account reinstated',
   payment_received: 'Payment received',
   worker_verified: 'Profile verified',
   report_submitted: 'Report submitted',

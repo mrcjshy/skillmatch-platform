@@ -4,40 +4,13 @@ import { Link } from 'react-router-dom';
 import { loadAnalytics } from '../api.js';
 import { useAuth } from '../auth-context.js';
 import {
-  BOOKING_KEYS, BOOKING_LABELS, JOB_KEYS, JOB_LABELS, PAYMENT_METHOD_KEYS, PAYMENT_METHOD_LABELS,
-  PAYMENT_STATUS_KEYS, PAYMENT_STATUS_LABELS, REPORT_KEYS, REPORT_LABELS,
-  formatDateTime, idReviewAttention, plural, reportAttention, sumBucket,
-} from '../domain.js';
+  PAYMENT_SERIES, bookingSplit, describeSplit, formatShare, jobSplit, paymentRows, reportSplit, verificationSplit,
+} from '../chart-data.js';
+import { ChartCard, Legend, MatrixTable, SegmentedBar, SplitTable, StackedBars } from '../charts.jsx';
+import { PAYMENT_METHOD_LABELS, formatDateTime, idReviewAttention, plural, reportAttention, sumBucket } from '../domain.js';
 import { Chip, PageHeader, Status } from '../ui.jsx';
 
-const methodTitle = (method) =>
-  method === 'qrph' ? `${PAYMENT_METHOD_LABELS.qrph} (PayMongo TEST)` : PAYMENT_METHOD_LABELS[method];
-
-const statusLine = (bucket) =>
-  PAYMENT_STATUS_KEYS.map((key) => `${PAYMENT_STATUS_LABELS[key]} ${bucket[key].toLocaleString()}`).join(' · ');
-
-function CountTable({ caption, rows }) {
-  const largest = Math.max(1, ...rows.map(([, value]) => value));
-  return (
-    <table className="counts">
-      <caption>{caption}</caption>
-      <tbody>
-        {rows.map(([label, value, detail]) => (
-          <tr key={label}>
-            <th scope="row">
-              {label}
-              {detail ? <span className="row-detail">{detail}</span> : null}
-            </th>
-            <td className="count-bar" aria-hidden="true">
-              {value > 0 ? <i style={{ width: `${(value / largest) * 100}%` }} /> : null}
-            </td>
-            <td>{value.toLocaleString()}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
+const methodTitle = (method) => (method === 'qrph' ? `${PAYMENT_METHOD_LABELS.qrph} (TEST)` : PAYMENT_METHOD_LABELS[method]);
 
 function Kpi({ label, value, note }) {
   return (
@@ -46,6 +19,19 @@ function Kpi({ label, value, note }) {
       <dd className="kpi-value">{value.toLocaleString()}</dd>
       {note ? <dd className="kpi-note">{note}</dd> : null}
     </div>
+  );
+}
+
+const share = (split, key) => formatShare(split.parts.find((part) => part.key === key).share);
+
+/** One whole, one tall segmented bar, its legend and its table. */
+function SplitChart({ title, meta, split, noun, head = 'Status' }) {
+  const shown = split.parts.filter((part) => part.value > 0);
+  return (
+    <ChartCard title={title} meta={meta} table={<SplitTable caption={title} split={split} head={head} />}>
+      <SegmentedBar split={split} noun={noun} label={describeSplit(split, noun, title)} />
+      {shown.length > 0 ? <Legend items={shown} /> : null}
+    </ChartCard>
   );
 }
 
@@ -74,6 +60,11 @@ export default function Dashboard() {
 
   const pending = summary?.pendingWorkerVerifications ?? 0;
   const open = summary?.reportsNeedingAttention ?? 0;
+  const bookings = summary ? bookingSplit(summary) : null;
+  const jobs = summary ? jobSplit(summary) : null;
+  const reports = summary ? reportSplit(summary) : null;
+  const verification = summary ? verificationSplit(summary) : null;
+  const payments = summary ? paymentRows(summary, methodTitle) : null;
 
   return (
     <>
@@ -98,7 +89,7 @@ export default function Dashboard() {
           <dl className="kpis">
             <Kpi label="Workers" value={summary.totalWorkers} note={`${summary.verifiedWorkers.toLocaleString()} verified`} />
             <Kpi label="Clients" value={summary.totalClients} />
-            <Kpi label="Jobs" value={sumBucket(summary.jobsByStatus)} />
+            <Kpi label="Jobs" value={sumBucket(summary.jobsByStatus)} note={`${summary.jobsByStatus.open.toLocaleString()} open`} />
             <Kpi label="Bookings" value={sumBucket(summary.bookingsByStatus)} note={`${summary.completedBookings.toLocaleString()} completed`} />
             <Kpi label="Reports" value={sumBucket(summary.reportsByStatus)} note={`${plural(summary.reportsNeedingAttention, 'report')} open`} />
           </dl>
@@ -108,65 +99,82 @@ export default function Dashboard() {
         <Status>Loading Admin analytics…</Status>
       ) : null}
 
-      <div className="overview">
-        <div className="overview-main">
-      <section className="section" aria-labelledby="attention-heading">
-        <h2 id="attention-heading">Needs attention</h2>
-        <ul className="list">
-          <li>
-            <Link className="list-row" to="/id-reviews">
-              <span className={pending > 0 ? 'attn-mark attn-mark-warning' : 'attn-mark'} />
-              <span className="list-main">
-                <span className="list-title">ID reviews</span>
-                <span className="list-line">{idReviewAttention(summary)}</span>
-              </span>
-              {pending > 0 ? <Chip tone="warning">{pending.toLocaleString()} waiting</Chip> : null}
-            </Link>
-          </li>
-          <li>
-            <Link className="list-row" to="/reports">
-              <span className={open > 0 ? 'attn-mark attn-mark-warning' : 'attn-mark'} />
-              <span className="list-main">
-                <span className="list-title">Reports</span>
-                <span className="list-line">{reportAttention(summary)}</span>
-              </span>
-              {open > 0 ? <Chip tone="warning">{open.toLocaleString()} open</Chip> : null}
-            </Link>
-          </li>
-        </ul>
-        <p className="fine-print">Opening a list does not complete a review.</p>
-      </section>
-          {summary ? (
-            <div className="pair">
-              <section className="section card">
-                <h2>Bookings by status</h2>
-                <CountTable caption="Bookings by status" rows={BOOKING_KEYS.map((k) => [BOOKING_LABELS[k], summary.bookingsByStatus[k]])} />
-              </section>
-              <section className="section card">
-                <h2>Jobs by status</h2>
-                <CountTable caption="Jobs by status" rows={JOB_KEYS.map((k) => [JOB_LABELS[k], summary.jobsByStatus[k]])} />
-              </section>
-            </div>
+      {/* A refresh keeps the last snapshot on screen, dimmed, instead of flashing a loader. */}
+      <div className={loading && summary ? 'dash is-refreshing' : 'dash'}>
+        <div className="dash-top">
+          <section className="card attention-card" aria-labelledby="attention-heading">
+            <h2 id="attention-heading">Needs attention</h2>
+            <ul className="list list-flush">
+              <li>
+                <Link className="list-row" to="/id-reviews">
+                  <span className={pending > 0 ? 'attn-mark attn-mark-warning' : 'attn-mark'} />
+                  <span className="list-main">
+                    <span className="list-title">ID reviews</span>
+                    <span className="list-line">{idReviewAttention(summary)}</span>
+                  </span>
+                  {pending > 0 ? <Chip tone="warning">{pending.toLocaleString()} waiting</Chip> : null}
+                </Link>
+              </li>
+              <li>
+                <Link className="list-row" to="/reports">
+                  <span className={open > 0 ? 'attn-mark attn-mark-warning' : 'attn-mark'} />
+                  <span className="list-main">
+                    <span className="list-title">Reports</span>
+                    <span className="list-line">{reportAttention(summary)}</span>
+                  </span>
+                  {open > 0 ? <Chip tone="warning">{open.toLocaleString()} open</Chip> : null}
+                </Link>
+              </li>
+            </ul>
+            <p className="fine-print">Opening a list does not complete a review.</p>
+          </section>
+          {verification ? (
+            <SplitChart
+              title="Worker verification"
+              meta={`${share(verification, 'verified')} of ${plural(verification.total, 'Worker')} verified`}
+              split={verification}
+              noun="Worker"
+              head="Stage"
+            />
           ) : null}
         </div>
+
         {summary ? (
-          <aside className="rail" aria-label="More counts">
-            <section className="section card">
-              <h2>Reports by status</h2>
-              <p className="fine-print">{plural(summary.reportsNeedingAttention, 'report')} open</p>
-              <CountTable caption="Reports by status" rows={REPORT_KEYS.map((k) => [REPORT_LABELS[k], summary.reportsByStatus[k]])} />
-            </section>
-            <section className="section card">
-              <h2>Payments</h2>
-              <p className="fine-print">
-                Counts of Bookings by payment method, not money. PayMongo runs in TEST mode, so no real money
-                moves.
-              </p>
-              <CountTable caption="Bookings by payment method" rows={PAYMENT_METHOD_KEYS.map((m) => [
-                methodTitle(m), sumBucket(summary.paymentsByMethodStatus[m]), statusLine(summary.paymentsByMethodStatus[m]),
-              ])} />
-            </section>
-          </aside>
+          <>
+            <div className="dash-charts">
+              <SplitChart
+                title="Bookings by status"
+                meta={`${plural(bookings.total, 'booking')} · ${share(bookings, 'completed')} completed`}
+                split={bookings}
+                noun="booking"
+              />
+              <SplitChart
+                title="Jobs by status"
+                meta={`${plural(jobs.total, 'job')} · ${summary.jobsByStatus.open.toLocaleString()} open`}
+                split={jobs}
+                noun="job"
+              />
+              <SplitChart
+                title="Reports by status"
+                meta={`${plural(reports.total, 'report')} · ${summary.reportsNeedingAttention.toLocaleString()} open`}
+                split={reports}
+                noun="report"
+              />
+            </div>
+            <ChartCard
+              className="chart-wide"
+              title="Payments by method"
+              meta="Bookings by payment method and payment status. These are counts, not money: PayMongo runs in TEST mode, so no real money moves."
+              table={<MatrixTable caption="Bookings by payment method and payment status" rows={payments} series={PAYMENT_SERIES} head="Method" />}
+            >
+              <StackedBars
+                rows={payments}
+                series={PAYMENT_SERIES}
+                noun="booking"
+                label={`Payments by method. ${plural(payments.reduce((sum, row) => sum + row.total, 0), 'booking')} in total.`}
+              />
+            </ChartCard>
+          </>
         ) : null}
       </div>
     </>

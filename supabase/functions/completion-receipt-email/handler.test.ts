@@ -1,7 +1,7 @@
 // Runs under `node --test` (Node 22.6+ type stripping) and `deno test`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { handleReceiptRequest, MAX_ATTEMPTS_PER_RECEIPT, RESEND_URL } from "./handler.ts";
+import { handleReceiptRequest, MAX_ATTEMPTS_PER_RECEIPT } from "./handler.ts";
 import type { ReceiptDeps } from "./handler.ts";
 
 const SECRET = "lane-c-local-dispatch-secret";
@@ -24,7 +24,7 @@ const CONTEXT = {
 type Harness = {
   deps: ReceiptDeps;
   ledger: Map<string, { status: string; attempts: number; ref: string | null; error: string | null }>;
-  sends: Array<{ url: string; headers: Record<string, string>; body: Record<string, unknown> }>;
+  sends: Array<{ to: string; subject: string; text: string; html?: string }>;
   contextCalls: string[];
 };
 
@@ -41,9 +41,13 @@ function harness(opts: {
   const deps: ReceiptDeps = {
     env: {
       webhookSecret: SECRET,
-      resendApiKey: "re_local_test",
-      from: "SkillMatch <receipts@example.test>",
       enabled: "enabled" in opts ? opts.enabled : "true",
+    },
+    send: async (email) => {
+      sends.push(email);
+      if (opts.status === "throw") return { ok: false, error: "smtp_unreachable" };
+      const status = opts.status ?? 200;
+      return status === 200 ? { ok: true, ref: "gmail-msg-1" } : { ok: false, error: `smtp_${status}` };
     },
     getContext: async (id) => {
       contextCalls.push(id);
@@ -70,16 +74,6 @@ function harness(opts: {
       cur.ref = ref;
       cur.error = error;
     },
-    fetchImpl: (async (url: string, init: RequestInit) => {
-      sends.push({
-        url,
-        headers: init.headers as Record<string, string>,
-        body: JSON.parse(String(init.body)),
-      });
-      if (opts.status === "throw") throw new Error("network");
-      const status = opts.status ?? 200;
-      return new Response(JSON.stringify(status === 200 ? { id: "resend-msg-1" } : { message: "x" }), { status });
-    }) as unknown as typeof fetch,
   };
   return { deps, ledger, sends, contextCalls };
 }
@@ -120,23 +114,21 @@ test("disabled unless COMPLETION_RECEIPT_ENABLED is exactly true", async () => {
 
 test("missing provider config is 503 and sends nothing", async () => {
   const h = harness();
-  h.deps.env.from = undefined;
+  h.deps.send = null;
   assert.deepEqual((await call(post(), h)), { status: 503, body: { sent: false, reason: "not_configured" } });
   assert.equal(h.sends.length, 0);
 });
 
-test("sends once to the server-derived verified email with the dedup idempotency key", async () => {
+test("sends once, by Gmail SMTP, to the server-derived verified email; the ledger records the message id", async () => {
   const h = harness();
   assert.deepEqual((await call(post(), h)).body, { sent: true });
   assert.equal(h.sends.length, 1);
   const s = h.sends[0];
-  assert.equal(s.url, RESEND_URL);
-  assert.equal(s.headers["idempotency-key"], `completion-receipt:${BID}`);
-  assert.deepEqual(s.body.to, ["client@example.test"]);
-  assert.equal(s.body.from, "SkillMatch <receipts@example.test>");
-  assert.match(String(s.body.text), /PayMongo TEST MODE/);
+  assert.equal(s.to, "client@example.test");
+  assert.match(s.text, /PayMongo TEST MODE/);
+  assert.ok(s.html && s.subject);
   const entry = h.ledger.get(`completion-receipt:${BID}`)!;
-  assert.deepEqual(entry, { status: "sent", attempts: 1, ref: "resend-msg-1", error: null });
+  assert.deepEqual(entry, { status: "sent", attempts: 1, ref: "gmail-msg-1", error: null });
 });
 
 test("replayed completion event does not send a second email", async () => {
@@ -176,7 +168,7 @@ test("provider failure is recorded, never thrown, and retries are capped", async
   assert.equal(h.sends.length, MAX_ATTEMPTS_PER_RECEIPT);
   const entry = h.ledger.get(`completion-receipt:${BID}`)!;
   assert.equal(entry.status, "failed");
-  assert.equal(entry.error, "http_422");
+  assert.equal(entry.error, "smtp_422");
 });
 
 test("network failure reports provider_unreachable and keeps the key retryable", async () => {

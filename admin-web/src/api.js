@@ -8,6 +8,7 @@
  *
  * Deliberately absent: verify_worker (approval goes only through
  * approve_worker_identity), any direct table write, any role change.
+ * Account state changes only through MOD-01 admin_set_account_banned.
  */
 import { supabase } from './supabase.js';
 import {
@@ -17,11 +18,15 @@ import {
   parseDirectoryPage,
   parseDisciplineState,
   parseIdentityForReview,
+  parseAccountProfile,
+  parseModeration,
+  parseModerationResult,
   parseNotifications,
   parsePendingReviews,
   parseReportDetail,
   parseReportList,
   parseUserDetail,
+  normaliseModerationReason,
   validateRejectionReason,
 } from './domain.js';
 
@@ -89,6 +94,26 @@ export async function loadDirectory(kind, search, page) {
 export async function loadUserDetail(kind, userId) {
   const data = await rpc('get_admin_user_detail', { p_user_id: userId, p_expected_role: kind });
   return parseUserDetail(data, kind, userId);
+}
+
+/* ---------------- REG-01 account profile / Worker resume ---------------- */
+
+export async function loadAccountProfile(userId) {
+  return parseAccountProfile(await rpc('get_admin_account_profile', { p_user_id: userId }), userId);
+}
+
+/* ---------------- MOD-01 account moderation ---------------- */
+
+export async function loadModeration(userId) {
+  return parseModeration(await rpc('get_admin_account_moderation', { p_user_id: userId }));
+}
+
+/** Ban (banned = true) or reinstate. A blank or over-long reason never reaches the server. */
+export async function setAccountBanned(userId, banned, reason) {
+  const trimmed = normaliseModerationReason(reason);
+  if (trimmed === null) throw new ApiError('invalid reason', { code: '22023' });
+  const data = await rpc('admin_set_account_banned', { p_user_id: userId, p_banned: banned, p_reason: trimmed });
+  return parseModerationResult(data, userId);
 }
 
 /* ---------------- Identity review ---------------- */

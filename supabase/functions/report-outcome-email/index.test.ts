@@ -74,6 +74,8 @@ Deno.test("terminal event is derived only from durable report state", () => {
   if (deriveOutcomeEvent("resolved", "no_show_strike") !== "no_show_strike") throw new Error("strike derivation failed");
   if (deriveOutcomeEvent("resolved", "account_suspended") !== "account_suspended") throw new Error("suspension derivation failed");
   if (deriveOutcomeEvent("submitted", null) !== null) throw new Error("nonterminal report was accepted");
+  if (deriveOutcomeEvent("under_review", null) !== "under_review") throw new Error("under review derivation failed");
+  if (deriveOutcomeEvent("under_review", "no_show_strike") !== null) throw new Error("under review with discipline was accepted");
   if (deriveOutcomeEvent("dismissed", "no_show_strike") !== null) throw new Error("invalid disciplinary state was accepted");
 });
 
@@ -141,4 +143,16 @@ Deno.test("retry idempotency keys are stable and recipient-scoped", () => {
     throw new Error("reporter idempotency key is not deterministic");
   }
   if (retry !== reporter || reported === reporter) throw new Error("retry key contract failed");
+});
+
+Deno.test("under review emails only the reporter, and says the report is still open", () => {
+  const messages = buildOutcomeEmails({
+    reportId: "11111111-1111-4111-8111-111111111111", reviewedAt: "2026-11-05T01:00:00Z", event: "under_review",
+    reporterEmail: "reporter@example.test", reportedEmail: "reported@example.test",
+    adminResponse: "Checking the booking chat.", bookingReference: null, strikeCount: null,
+  });
+  if (messages.length !== 1) throw new Error("reported user must not be emailed while under review");
+  if (messages[0].to !== "reporter@example.test") throw new Error("wrong recipient");
+  if (messages[0].subject !== "SkillMatch report under review") throw new Error("wrong subject");
+  if (!messages[0].text.includes("under review") || !messages[0].text.includes("Checking the booking chat.")) throw new Error("wrong text");
 });

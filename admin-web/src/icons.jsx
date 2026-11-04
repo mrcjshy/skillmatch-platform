@@ -88,18 +88,3 @@ export const IconBack = () => (
     <path d="m15 18-6-6 6-6" />
   </Icon>
 );
-
-export function SkillMatchMark({ className }) {
-  return (
-    <svg className={className} viewBox="130 72 764 860" aria-hidden="true" focusable="false">
-      <path
-        fill="currentColor"
-        d="M864 102H400C267 102 160 209 160 342V378C160 488 249 578 360 578H376V478H600V426H360C334 426 312 404 312 378V342C312 294 352 254 400 254H864Z"
-      />
-      <path
-        fill="currentColor"
-        d="M160 902H624C757 902 864 795 864 662V626C864 516 775 426 664 426H648V526H424V578H664C690 578 712 600 712 626V662C712 710 672 750 624 750H160Z"
-      />
-    </svg>
-  );
-}

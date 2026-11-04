@@ -96,7 +96,8 @@ const NAV = [
   { group: 'Inbox', items: [['/notifications', 'Notifications', IconBell]] },
 ];
 
-const LOGO = '/skillmatch-logo.png';
+/** Itik's launcher tile: the same mark as the SkillMatch app icon and splash. */
+const LOGO = '/skillmatch-mark.png';
 
 function pageLabel(pathname) {
   const items = NAV.flatMap(({ items: groupItems }) => groupItems);
@@ -176,7 +177,7 @@ function Shell() {
       </div>
       <header id="sidebar" className="sidebar" data-open={navOpen}>
         <div className="brand">
-          <img className="brand-logo" src={LOGO} alt="" width="32" height="32" />
+          <img className="brand-logo" src={LOGO} alt="" width="36" height="36" />
           <span className="brand-name">SkillMatch <small>Admin · Santa Ana, Pateros</small></span>
           <button
             ref={closeButton}

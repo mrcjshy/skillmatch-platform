@@ -196,3 +196,4 @@ COMMENT ON FUNCTION public.resolve_no_show_report_with_strike(uuid,text) IS
 ALTER FUNCTION public.resolve_no_show_report_with_strike(uuid,text) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.resolve_no_show_report_with_strike(uuid,text) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.resolve_no_show_report_with_strike(uuid,text) TO authenticated;
+

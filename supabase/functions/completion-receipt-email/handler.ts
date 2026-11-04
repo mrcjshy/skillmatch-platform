@@ -13,10 +13,12 @@
 // before this runs; nothing here mutates the booking, and every email
 // failure is reported as {sent:false} without affecting it.
 //
-// Dedup: durable ledger key completion-receipt:<booking_id>, which is
-// also the Resend Idempotency-Key. "sent" in the response means the
-// provider accepted the request, never that an inbox received it.
+// Dedup: durable ledger key completion-receipt:<booking_id>. "sent" in the
+// response means Gmail SMTP accepted the message, never that an inbox
+// received it. Transport: Gmail SMTP via the injected sender (owner decision
+// 2026-11-05; see _shared/gmail-mailer.ts), replacing the unconfigured Resend.
 
+import type { SendEmail } from "../_shared/gmail-mailer.ts";
 import {
   buildReceiptDedupKey,
   buildReceiptEmail,
@@ -24,23 +26,20 @@ import {
   validateContext,
 } from "./receipt.ts";
 
-export const RESEND_URL = "https://api.resend.com/emails";
 export const MAX_ATTEMPTS_PER_RECEIPT = 3;
-const PROVIDER_TIMEOUT_MS = 15_000;
 
 export type ReceiptDeps = {
   env: {
     webhookSecret?: string;
-    resendApiKey?: string;
-    from?: string;
     /** Must be exactly "true" to send. */
     enabled?: string;
   };
+  /** The configured sender, or null when the Gmail settings are missing (nothing is sent). */
+  send: SendEmail | null;
   /** public.get_completion_receipt_context(p_booking_id) first row, or null. */
   getContext: (bookingId: string) => Promise<unknown | null>;
   claim: (dedupKey: string, bookingId: string, maxAttempts: number) => Promise<boolean>;
   finish: (dedupKey: string, sent: boolean, providerRef: string | null, error: string | null) => Promise<void>;
-  fetchImpl?: typeof fetch;
 };
 
 export function timingSafeEqual(a: string, b: string): boolean {
@@ -79,9 +78,7 @@ export async function handleReceiptRequest(req: Request, deps: ReceiptDeps): Pro
   if (!parsed) return json(400, { error: "invalid request" });
 
   if (deps.env.enabled !== "true") return json(200, { sent: false, reason: "disabled" });
-  const resendKey = deps.env.resendApiKey?.trim();
-  const from = deps.env.from?.trim();
-  if (!resendKey || !from) return json(503, { sent: false, reason: "not_configured" });
+  if (!deps.send) return json(503, { sent: false, reason: "not_configured" });
 
   let context;
   try {
@@ -104,43 +101,11 @@ export async function handleReceiptRequest(req: Request, deps: ReceiptDeps): Pro
   if (!claimed) return json(200, { sent: false, reason: "duplicate" });
 
   const email = buildReceiptEmail(context);
-  const fetchImpl = deps.fetchImpl ?? fetch;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
-  try {
-    const res = await fetchImpl(RESEND_URL, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        authorization: `Bearer ${resendKey}`,
-        "content-type": "application/json",
-        "idempotency-key": key,
-      },
-      body: JSON.stringify({
-        from,
-        to: [email.to],
-        subject: email.subject,
-        text: email.text,
-        html: email.html,
-      }),
-    });
-    if (!res.ok) {
-      await deps.finish(key, false, null, `http_${res.status}`).catch(() => {});
-      return json(200, { sent: false, reason: "provider_rejected" });
-    }
-    let providerRef: string | null = null;
-    try {
-      const body = await res.json() as { id?: unknown };
-      providerRef = typeof body?.id === "string" ? body.id.slice(0, 200) : null;
-    } catch {
-      providerRef = null;
-    }
-    await deps.finish(key, true, providerRef, null).catch(() => {});
-    return json(200, { sent: true });
-  } catch {
-    await deps.finish(key, false, null, "network").catch(() => {});
-    return json(200, { sent: false, reason: "provider_unreachable" });
-  } finally {
-    clearTimeout(timer);
+  const result = await deps.send({ to: email.to, subject: email.subject, text: email.text, html: email.html });
+  if (result.ok === false) {
+    await deps.finish(key, false, null, result.error).catch(() => {});
+    return json(200, { sent: false, reason: result.error === "smtp_unreachable" ? "provider_unreachable" : "provider_rejected" });
   }
+  await deps.finish(key, true, result.ref, null).catch(() => {});
+  return json(200, { sent: true });
 }

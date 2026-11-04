@@ -4,13 +4,15 @@
 //
 // Proposed config.toml: [functions.completion-receipt-email] verify_jwt = false.
 // Boundary: x-skillmatch-dispatch-secret == SKILLMATCH_DISPATCH_WEBHOOK_SECRET.
-// Provider: Resend (same as report-outcome-email), key RESEND_API_KEY,
-// sender COMPLETION_RECEIPT_EMAIL_FROM (a verified Resend domain).
+// Provider: Gmail SMTP (GMAIL_SMTP_USER, GMAIL_SMTP_APP_PASSWORD, optional
+// EMAIL_FROM_NAME; see _shared/gmail-mailer.ts). Owner decision 2026-11-05.
 // Requires the service_role-only RPCs proposed in the Lane C approvals file:
 //   get_completion_receipt_context, claim_outbound_dispatch, finish_outbound_dispatch.
 // Sends only when COMPLETION_RECEIPT_ENABLED is exactly "true".
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { gmailConfig } from "../_shared/gmail-mailer.ts";
+import { createGmailSender } from "../_shared/gmail-transport.ts";
 import { handleReceiptRequest } from "./handler.ts";
 
 function env(name: string): string | undefined {
@@ -36,10 +38,12 @@ export function serve(req: Request): Promise<Response> {
   return handleReceiptRequest(req, {
     env: {
       webhookSecret: env("SKILLMATCH_DISPATCH_WEBHOOK_SECRET"),
-      resendApiKey: env("RESEND_API_KEY"),
-      from: env("COMPLETION_RECEIPT_EMAIL_FROM"),
       enabled: env("COMPLETION_RECEIPT_ENABLED"),
     },
+    send: (() => {
+      const config = gmailConfig(env);
+      return config ? createGmailSender(config) : null;
+    })(),
     getContext: async (bookingId) => {
       const { data, error } = await admin.rpc("get_completion_receipt_context", {
         p_booking_id: bookingId,

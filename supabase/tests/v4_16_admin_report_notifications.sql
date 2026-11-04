@@ -104,7 +104,8 @@ BEGIN
     AND c.contype = 'c'
     AND c.convalidated;
 
-  PERFORM pg_temp.pass(1, 'notification type CHECK contains exactly the approved nine values',
+  -- MOD-01 (2026-11-03) added account_reinstated as the tenth approved value.
+  PERFORM pg_temp.pass(1, 'notification type CHECK contains exactly the approved ten values',
     v_constraint IS NOT NULL
     AND v_constraint LIKE '%booking_request%'
     AND v_constraint LIKE '%booking_confirmed%'
@@ -112,12 +113,13 @@ BEGIN
     AND v_constraint LIKE '%booking_completed%'
     AND v_constraint LIKE '%no_show_strike%'
     AND v_constraint LIKE '%account_suspended%'
+    AND v_constraint LIKE '%account_reinstated%'
     AND v_constraint LIKE '%payment_received%'
     AND v_constraint LIKE '%worker_verified%'
     AND v_constraint LIKE '%report_submitted%'
     AND (
       length(v_constraint) - length(replace(v_constraint, '::character varying', ''))
-    ) / length('::character varying') = 9,
+    ) / length('::character varying') = 10,
     coalesce(v_constraint, 'missing'));
 
   PERFORM pg_temp.pass(2, 'booking submission exposes only Booking/category/description input',

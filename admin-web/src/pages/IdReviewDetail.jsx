@@ -6,6 +6,7 @@ import { useAuth } from '../auth-context.js';
 import {
   IDENTITY_COPY, formatDateTime, identityActionCopy, identityTypeLabel, isUuid, validateRejectionReason,
 } from '../domain.js';
+import { ProfileCard } from '../ProfileCard.jsx';
 import { Avatar, Chip, ConfirmDialog, Facts, LiveNotice, PageHeader, Status } from '../ui.jsx';
 
 /**
@@ -193,6 +194,7 @@ export default function IdReviewDetail() {
           ['Location', location || null],
         ]} />
       </section>
+      <ProfileCard userId={userId} />
 
       <section className="section card" aria-labelledby="decision-heading">
         <h2 id="decision-heading">Decision</h2>

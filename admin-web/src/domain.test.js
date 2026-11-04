@@ -7,13 +7,22 @@ import {
   PAYMENT_METHOD_LABELS,
   allowedReviewStatuses,
   formatNotificationLabel,
+  formatBirthDate,
+  formatHomeAddress,
+  formatSkillExperience,
   isUnread,
+  moderationActionCopy,
+  normaliseModerationReason,
+  parseAccountProfile,
   parseAnalytics,
   parseDirectoryPage,
   parseDisciplineState,
   parseIdentityForReview,
+  parseModeration,
+  parseModerationResult,
   parsePendingReviews,
   parseUserDetail,
+  strikeSummary,
   validateAdminResponse,
   validateRejectionReason,
 } from './domain.js';
@@ -128,4 +137,73 @@ test('notification labels never leak a raw type, and NULL is unread', () => {
   assert.equal(isUnread(null), true);
   assert.equal(isUnread(false), true);
   assert.equal(isUnread(true), false);
+});
+
+// MOD-01 account moderation
+const MOD_ID = '12345678-1234-1234-1234-123456789abc';
+const modRead = { is_active: false, strike_count: 3, last_action: null, last_reason: null, last_action_at: null };
+const modBan = { is_active: false, strike_count: null, last_action: 'ban', last_reason: 'Abuse', last_action_at: '2026-11-03T12:00:00Z' };
+
+test('MOD-01 moderation read accepts one exact row and rejects anything else', () => {
+  assert.deepEqual(parseModeration([modRead]), modRead);
+  assert.deepEqual(parseModeration([modBan]), modBan);
+  for (const bad of [
+    [{ ...modRead, email: 'x@example.test' }], [modRead, modRead], [], modRead, null,
+    [{ ...modRead, strike_count: 4 }], [{ ...modRead, strike_count: -1 }],
+    [{ ...modBan, last_action: 'warn' }], [{ ...modBan, last_reason: null }],
+  ]) assert.throws(() => parseModeration(bad));
+});
+
+test('MOD-01 write result must name the requested account', () => {
+  const row = { user_id: MOD_ID, is_active: true, strike_count: 0, changed: true };
+  assert.deepEqual(parseModerationResult([row], MOD_ID), row);
+  assert.throws(() => parseModerationResult([{ ...row, user_id: '12345678-1234-1234-1234-123456789abd' }], MOD_ID));
+  assert.throws(() => parseModerationResult([{ ...row, changed: 1 }], MOD_ID));
+});
+
+test('MOD-01 reason, strike copy and error copy', () => {
+  assert.equal(normaliseModerationReason('  Abuse '), 'Abuse');
+  assert.equal(normaliseModerationReason('   '), null);
+  assert.equal(normaliseModerationReason('a'.repeat(501)), null);
+  assert.equal(strikeSummary(2), '2 of 3');
+  assert.equal(strikeSummary(null), 'No Worker profile');
+  assert.match(moderationActionCopy({ code: 'SM409' }), /cannot be moderated/);
+  assert.match(moderationActionCopy({ code: '22023' }), /reason/);
+  assert.match(moderationActionCopy({ code: 'XX000', message: 'raw' }), /Unable to update/);
+  assert.equal(formatNotificationLabel('account_reinstated'), 'Account reinstated');
+});
+
+// REG-01 account profile / Worker resume
+const REG_ID = '12345678-1234-1234-1234-123456789abc';
+const regClient = {
+  user_id: REG_ID, role: 'client', full_name: 'Ana Santos', first_name: 'Ana', middle_name: null, last_name: 'Santos',
+  name_suffix: null, email: 'ana@example.test', phone: '+639171234567', address_street: '5 B. Morcilla',
+  address_barangay: 'Poblacion', address_city: 'Pateros', address_province: 'Metro Manila',
+  client_account_type: 'business', business_name: 'Santos Bakery', profile_completed_at: '2026-11-03T00:00:00Z',
+};
+const regWorker = {
+  ...regClient, role: 'worker', client_account_type: null, business_name: null, birth_date: '1990-05-21',
+  education_level: 'vocational', school_name: null, resume_completed_at: null,
+  work_history: [{ employer: 'ABC', role: 'Carpenter', start_year: 2018, end_year: null }],
+  skills: [{ name: 'Carpentry', proficiency: 'expert', years: 7 }],
+};
+
+test('REG-01 profile parser accepts exact Client and Worker objects only', () => {
+  assert.deepEqual(parseAccountProfile(regClient, REG_ID), regClient);
+  assert.deepEqual(parseAccountProfile(regWorker, REG_ID), regWorker);
+  for (const bad of [
+    { ...regClient, password: 'x' }, { ...regClient, birth_date: null }, { ...regWorker, education_level: 'phd' },
+    { ...regWorker, education_level: 'toString' }, { ...regWorker, skills: [{ name: 'X', proficiency: null, years: 'many' }] },
+    { ...regClient, user_id: '12345678-1234-1234-1234-123456789abd' }, { ...regClient, role: 'administrator' }, [regClient], null,
+  ]) assert.throws(() => parseAccountProfile(bad, REG_ID));
+});
+
+test('REG-01 profile formatting', () => {
+  assert.equal(formatHomeAddress(regClient), '5 B. Morcilla, Brgy. Poblacion, Pateros, Metro Manila');
+  assert.equal(formatBirthDate('1990-05-21', new Date('2026-11-03T04:00:00Z')), 'May 21, 1990 (age 36)');
+  // No skill level anywhere (owner, 2026-11-05): a stored level is ignored, years stay.
+  assert.equal(formatSkillExperience({ proficiency: 'expert', years: 7 }), '7 years');
+  assert.equal(formatSkillExperience({ proficiency: 'beginner', years: 1 }), '1 year');
+  assert.equal(formatSkillExperience({ proficiency: 'intermediate', years: null }), 'Not provided');
+  assert.equal(formatSkillExperience({ proficiency: null, years: null }), 'Not provided');
 });

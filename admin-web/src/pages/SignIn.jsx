@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 
 import { useAuth, usePageTitle } from '../auth-context.js';
-import { SkillMatchMark } from '../icons.jsx';
 import { safeRedirectPath } from '../session.js';
 import { configError } from '../supabase.js';
 
@@ -44,12 +43,12 @@ export default function SignIn() {
   return (
     <main className="signin">
       <div className="signin-art" aria-hidden="true">
-        <SkillMatchMark className="signin-mark" />
+        <img className="signin-mark" src="/itik-hello.png" alt="" width="348" height="560" />
       </div>
       <div className="signin-panel">
       <div className="signin-card">
         <div className="brand">
-          <img className="brand-logo" src="/skillmatch-logo.png" alt="" width="32" height="32" />
+          <img className="brand-logo" src="/skillmatch-mark.png" alt="" width="36" height="36" />
           <span className="brand-name">SkillMatch <small>Admin · Santa Ana, Pateros</small></span>
         </div>
         <h1>Sign in</h1>

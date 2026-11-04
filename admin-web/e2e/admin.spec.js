@@ -85,6 +85,8 @@ async function mockBackend(page, overrides = {}) {
     roles: Object.fromEntries(Object.values(ACCOUNTS).map((a) => [a.id, { role: a.role, is_active: a.is_active }])),
     approve: { status: 200, body: [{ user_id: PENDING_WORKER_ID, document_id: PENDING.document_id, is_verified: true, verified_by: ADMIN_ID }] },
     reportStatus: 'submitted',
+    // MOD-01: the moderated Worker (PENDING_WORKER_ID) starts active with two strikes.
+    moderation: { is_active: true, strike_count: 2, last_action: null, last_reason: null, last_action_at: null },
     ...overrides,
   };
   const seen = { requests: [], unexpected: [], foreign: [], cspViolations: [] };
@@ -155,6 +157,37 @@ async function mockBackend(page, overrides = {}) {
     if (rpc === 'list_reports') return json(200, [reportRow(state.reportStatus)]);
     if (rpc === 'get_report') return json(200, [state.reports?.[body.p_report_id] ?? reportRow(state.reportStatus)]);
     if (rpc === 'get_report_discipline_state') return json(200, [{ eligible: false, current_strike_count: null, would_suspend: false }]);
+    if (rpc === 'get_admin_user_detail') {
+      return json(200, {
+        user_id: body.p_user_id, full_name: 'Maria Santos', is_active: state.moderation.is_active,
+        created_at: '2026-09-01T00:00:00Z', has_profile: true, is_verified: true,
+        availability_status: 'available', completed_bookings_count: 4,
+      });
+    }
+    if (rpc === 'get_admin_account_moderation') return json(200, [state.moderation]);
+    if (rpc === 'get_admin_account_profile') {
+      return json(200, {
+        user_id: body.p_user_id, role: 'worker', full_name: 'Maria Santos', first_name: 'Maria', middle_name: null,
+        last_name: 'Santos', name_suffix: null, email: 'maria@e2e.test', phone: '+639171234567',
+        address_street: '12 M. Almeda St.', address_barangay: 'San Roque', address_city: 'Pateros', address_province: 'Metro Manila',
+        client_account_type: null, business_name: null, profile_completed_at: '2026-11-03T00:00:00Z',
+        birth_date: '1990-05-21', education_level: 'vocational', school_name: 'TESDA Pateros', resume_completed_at: '2026-11-03T00:00:00Z',
+        work_history: [{ employer: 'ABC Builders', role: 'Carpenter', start_year: 2018, end_year: null }],
+        skills: [{ name: 'Plumbing', proficiency: 'expert', years: 6 }],
+      });
+    }
+    if (rpc === 'admin_set_account_banned') {
+      const banned = body.p_banned === true;
+      const changed = state.moderation.is_active === banned;
+      if (changed) {
+        state.moderation = {
+          is_active: !banned,
+          strike_count: banned ? state.moderation.strike_count : 0,
+          last_action: banned ? 'ban' : 'reinstate', last_reason: body.p_reason, last_action_at: '2026-11-03T12:00:00Z',
+        };
+      }
+      return json(200, [{ user_id: body.p_user_id, is_active: state.moderation.is_active, strike_count: state.moderation.strike_count, changed }]);
+    }
     if (rpc === 'review_report') {
       state.reportStatus = body.p_status;
       return json(200, [{ report_id: REPORT_ID, status: body.p_status }]);
@@ -425,6 +458,20 @@ test('a report review is confirmed, then saved, then the outcome email is reques
   expect(emails.map((r) => r.body)).toEqual([{ report_id: REPORT_ID }]);
 });
 
+test('marking a report under review also requests the reporter email (owner, 2026-11-05)', async ({ page }) => {
+  await signInAsAdmin(page);
+  await page.getByRole('link', { name: 'Reports', exact: true }).first().click();
+  await page.getByRole('link', { name: 'Other, Submitted. View report details' }).click();
+  await page.getByRole('button', { name: 'Mark under review' }).click();
+  const dialog = page.getByRole('dialog');
+  if (await dialog.isVisible()) await dialog.getByRole('button', { name: /under review/i }).click();
+
+  await expect(page.getByText('Review saved.')).toBeVisible();
+  expect(rpcCalls(backend.seen, 'review_report').map((r) => r.body.p_status)).toEqual(['under_review']);
+  const emails = backend.seen.requests.filter((r) => r.path === '/functions/v1/report-outcome-email');
+  expect(emails.map((r) => r.body)).toEqual([{ report_id: REPORT_ID }]);
+});
+
 test('responses carry the vercel.json security headers', async ({ page }) => {
   const response = await page.goto('/sign-in');
   const headers = response.headers();
@@ -442,4 +489,57 @@ test('responses carry the vercel.json security headers', async ({ page }) => {
   await expect(page.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveAttribute(
     'content', new RegExp(`connect-src 'self' ${SUPABASE.replace(/\./g, '\\.')}(;|$)`)
   );
+});
+
+test('MOD-01: a Worker ban needs a reason and confirmation; reinstating resets strikes to 0', async ({ page }) => {
+  await signInAsAdmin(page);
+  await navigateWithinApp(page, `/users/worker/${PENDING_WORKER_ID}`);
+  await expect(page.getByRole('heading', { name: 'Moderation' })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'No-show strikes: 2 of 3' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Ban account' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Ban this account?' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Ban account' }).click();
+  await expect(dialog.getByText('Enter a reason of 1 to 500 characters.')).toBeVisible();
+  expect(rpcCalls(backend.seen, 'admin_set_account_banned')).toEqual([]);
+
+  await dialog.getByLabel('Reason').fill('  Fraudulent listing  ');
+  await dialog.getByRole('button', { name: 'Ban account' }).click();
+  await expect(page.getByText('Account banned. It stays suspended until an Administrator reinstates it.')).toBeVisible();
+  await expect(page.getByText('Fraudulent listing', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reinstate account' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Reinstate account' }).click();
+  const reinstate = page.getByRole('dialog', { name: 'Reinstate this account?' });
+  await reinstate.getByLabel('Reason').fill('Appeal accepted');
+  await reinstate.getByRole('button', { name: 'Reinstate account' }).click();
+  await expect(page.getByText('Account reinstated. No-show strikes were reset to 0.')).toBeVisible();
+  await expect(page.getByRole('img', { name: 'No-show strikes: 0 of 3' })).toBeVisible();
+
+  expect(rpcCalls(backend.seen, 'admin_set_account_banned').map((r) => r.body)).toEqual([
+    { p_user_id: PENDING_WORKER_ID, p_banned: true, p_reason: 'Fraudulent listing' },
+    { p_user_id: PENDING_WORKER_ID, p_banned: false, p_reason: 'Appeal accepted' },
+  ]);
+});
+
+test('REG-01: Admin sees the full Worker resume on Worker details and on ID review', async ({ page }) => {
+  await signInAsAdmin(page);
+  await navigateWithinApp(page, `/users/worker/${PENDING_WORKER_ID}`);
+  const resume = page.locator('section', { has: page.getByRole('heading', { name: 'Resume' }) });
+  await expect(resume.getByText('12 M. Almeda St., Brgy. San Roque, Pateros, Metro Manila')).toBeVisible();
+  await expect(resume.getByText('maria@e2e.test')).toBeVisible();
+  await expect(resume.getByText('Vocational / TESDA')).toBeVisible();
+  // Years of experience only: the stored skill level is never shown (owner, 2026-11-05).
+  await expect(resume.getByText('6 years', { exact: true })).toBeVisible();
+  await expect(resume.getByText(/Beginner|Intermediate|Expert/)).toHaveCount(0);
+  await expect(resume.getByText('Carpenter · ABC Builders')).toBeVisible();
+  await expect(resume.getByText('2018 – Present')).toBeVisible();
+
+  await navigateWithinApp(page, `/id-reviews/${PENDING_WORKER_ID}`);
+  await expect(page.getByRole('heading', { name: 'Resume' })).toBeVisible();
+  await expect(page.getByText('Carpenter · ABC Builders')).toBeVisible();
+  expect(rpcCalls(backend.seen, 'get_admin_account_profile').map((r) => r.body)).toEqual([
+    { p_user_id: PENDING_WORKER_ID }, { p_user_id: PENDING_WORKER_ID },
+  ]);
 });
