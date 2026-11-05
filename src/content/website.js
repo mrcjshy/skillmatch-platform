@@ -47,7 +47,7 @@ export const assets = {
   },
   APP_BOOKING: {
     src: '/website/app-booking-confirmed.webp',
-    alt: 'Active booking card showing a confirmed Aircon Repair booking',
+    alt: 'Active booking card showing a confirmed Aircon Cleaning & Repair booking',
     label: 'Active booking',
     width: 760,
     height: 220,
@@ -105,7 +105,7 @@ export const tryMatch = {
 }
 export const sampleJobs = [
   { id: 'sink', title: 'Leaking kitchen sink', skills: ['Plumbing'] },
-  { id: 'aircon', title: 'Aircon not cooling', skills: ['Aircon Repair'] },
+  { id: 'aircon', title: 'Aircon not cooling', skills: ['Aircon Cleaning & Repair'] },
   {
     id: 'outlet',
     title: 'Sink pipe and a sparking outlet',
@@ -147,7 +147,7 @@ export const sampleWorkers = [
   {
     id: 'c',
     name: 'Worker C',
-    skills: ['Aircon Repair', 'Electrical Work', 'Appliance Repair'],
+    skills: ['Aircon Cleaning & Repair', 'Electrical Work', 'Appliance Repair'],
     barangay: 'Santa Ana',
     city: 'Pateros',
     rating: null,
@@ -160,7 +160,7 @@ export const sampleWorkers = [
   {
     id: 'd',
     name: 'Worker D',
-    skills: ['Plumbing', 'Aircon Repair', 'Painting'],
+    skills: ['Plumbing', 'Aircon Cleaning & Repair', 'Painting'],
     barangay: 'Santa Ana',
     city: 'Pateros',
     rating: 4.9,
@@ -173,7 +173,7 @@ export const sampleWorkers = [
   {
     id: 'e',
     name: 'Worker E',
-    skills: ['Aircon Repair', 'Tile Setting'],
+    skills: ['Aircon Cleaning & Repair', 'Tile Setting'],
     barangay: 'San Roque',
     city: 'Pateros',
     rating: 4.2,
@@ -186,7 +186,7 @@ export const sampleWorkers = [
   {
     id: 'f',
     name: 'Worker F',
-    skills: ['Plumbing', 'Electrical Work', 'Aircon Repair', 'Tile Setting'],
+    skills: ['Plumbing', 'Electrical Work', 'Aircon Cleaning & Repair', 'Tile Setting'],
     barangay: 'Bagumbayan',
     city: 'Taguig',
     rating: 4.7,
@@ -268,21 +268,35 @@ export const journey = [
   },
 ]
 export const skills = [
-  'Aircon Repair',
+  'Aircon Cleaning & Repair',
   'Appliance Repair',
+  'Baking',
+  'Caregiving',
   'Carpentry',
-  'Cooking',
+  'Catering & Event Help',
+  'Child Care (Yaya)',
+  'Cooking & Food Prep',
+  'Driving',
   'Electrical Work',
-  'Gardening',
-  'General Labor',
+  'Electronics & Cellphone Repair',
+  'Gardening & Landscaping',
+  'Glass & Aluminum Works',
+  'Haircut & Barbering',
   'House Cleaning',
-  'Laundry',
+  'Laundry & Ironing',
+  'Manicure & Pedicure',
   'Masonry',
+  'Massage Therapy',
   'Motorcycle Repair',
+  'Moving & Hauling',
   'Painting',
+  'Pest Control',
+  'Pet Care',
   'Plumbing',
-  'Sewing',
+  'Roofing & Gutter Repair',
+  'Sewing & Dressmaking',
   'Tile Setting',
+  'Tutoring',
   'Welding',
 ]
 export const faqs = [
