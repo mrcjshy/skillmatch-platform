@@ -120,11 +120,11 @@ BEGIN
   );
 
   -- 1 current version helpers
-  PERFORM pg_temp.pass(1, 'locked terms version is 2026-09-v1',
-    private.current_legal_terms_version() = '2026-09-v1',
+  PERFORM pg_temp.pass(1, 'locked terms version is 2026-11-v1 (LEG-01)',
+    private.current_legal_terms_version() = '2026-11-v1',
     private.current_legal_terms_version());
-  PERFORM pg_temp.pass(2, 'locked privacy version is 2026-10-v1',
-    private.current_legal_privacy_version() = '2026-10-v1',
+  PERFORM pg_temp.pass(2, 'locked privacy version is 2026-11-v1 (LEG-01)',
+    private.current_legal_privacy_version() = '2026-11-v1',
     private.current_legal_privacy_version());
 
   -- 3 anon record denied

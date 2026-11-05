@@ -111,10 +111,10 @@ BEGIN
   PERFORM pg_temp.mk_user(u_old, 'cai01-old@example.test', 'client');
   PERFORM pg_temp.mk_user(u_new, 'cai01-new@example.test', 'worker');
 
-  PERFORM pg_temp.pass(1, 'current privacy is 2026-10-v1',
-    private.current_legal_privacy_version() = '2026-10-v1', private.current_legal_privacy_version());
-  PERFORM pg_temp.pass(2, 'terms stays 2026-09-v1',
-    private.current_legal_terms_version() = '2026-09-v1', private.current_legal_terms_version());
+  PERFORM pg_temp.pass(1, 'current privacy is 2026-11-v1 (LEG-01)',
+    private.current_legal_privacy_version() = '2026-11-v1', private.current_legal_privacy_version());
+  PERFORM pg_temp.pass(2, 'privacy 2026-10-v1 still accepted (LEG-01 window)',
+    private.is_accepted_legal_privacy_version('2026-10-v1'), private.current_legal_terms_version());
 
   -- old installed build
   a := pg_temp.rec(u_old, '2026-09-v1', '2026-09-v1');
