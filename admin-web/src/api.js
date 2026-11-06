@@ -85,9 +85,10 @@ export async function loadAnalytics() {
   return parseAnalytics(await rpc('get_admin_analytics_summary'));
 }
 
-export async function loadDirectory(kind, search, page) {
-  const name = kind === 'worker' ? 'get_admin_worker_directory' : 'get_admin_client_directory';
-  const data = await rpc(name, { p_search: search, p_page: page, p_page_size: DIRECTORY_PAGE_SIZE });
+/** ADM-01 _v2 reads: v1 plus a status filter, and strike_count on Worker rows. */
+export async function loadDirectory(kind, search, page, status = 'all') {
+  const name = kind === 'worker' ? 'get_admin_worker_directory_v2' : 'get_admin_client_directory_v2';
+  const data = await rpc(name, { p_search: search, p_page: page, p_page_size: DIRECTORY_PAGE_SIZE, p_status: status });
   return parseDirectoryPage(data, kind);
 }
 
@@ -201,4 +202,22 @@ export async function listNotifications() {
 
 export async function markNotificationRead(notificationId) {
   await rpc('mark_my_notification_read', { p_notification_id: notificationId });
+}
+
+/** NTF-01: the caller's unread count only (recipient-only RLS); no rows are read. */
+export async function countUnreadNotifications() {
+  const { count, error, status } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .not('is_read', 'is', true);
+  if (error) throw toApiError(error, status);
+  return typeof count === 'number' ? count : 0;
+}
+
+/* ---------------- Settings ---------------- */
+
+/** Signed-in password change (owner 2026-11-06): PUT /auth/v1/user, with no email and no redirect. */
+export async function changeMyPassword(password) {
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw toApiError(error);
 }

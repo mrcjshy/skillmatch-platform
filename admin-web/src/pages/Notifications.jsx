@@ -4,8 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { listNotifications, markNotificationRead } from '../api.js';
 import { useAuth } from '../auth-context.js';
 import {
-  NOTIFICATION_COPY, formatDateTime, formatNotificationLabel, isUnread, notificationHref,
+  NOTIFICATION_COPY, formatDateTime, formatNotificationLabel, isUnread, notificationDestination, notificationHref,
 } from '../domain.js';
+import { useLiveNotifications } from '../live-context.js';
 import { LiveNotice, PageHeader, Status } from '../ui.jsx';
 
 /**
@@ -15,6 +16,7 @@ import { LiveNotice, PageHeader, Status } from '../ui.jsx';
  */
 export default function Notifications() {
   const { handleError } = useAuth();
+  const { version, refreshUnread } = useLiveNotifications();
   const navigate = useNavigate();
   const [rows, setRows] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +39,8 @@ export default function Notifications() {
   }, [handleError]);
 
   useEffect(() => { void load(); }, [load]);
+  // NTF-01: a new notification arrived on the live channel, so re-read the list.
+  useEffect(() => { if (version > 0) void load(); }, [version, load]);
 
   const busy = loading || marking !== null;
 
@@ -48,6 +52,7 @@ export default function Notifications() {
       setNotice(null);
       try {
         await markNotificationRead(row.id);
+        void refreshUnread();
         try {
           setRows(await listNotifications());
         } catch {
@@ -87,6 +92,7 @@ export default function Notifications() {
           {rows.map((row) => {
             const unread = isUnread(row.is_read);
             const href = notificationHref(row.type);
+            const place = notificationDestination(row.type);
             const label = formatNotificationLabel(row.type);
             const created = formatDateTime(row.created_at);
             const body = (
@@ -101,9 +107,9 @@ export default function Notifications() {
                 {marking === row.id ? (
                   <span className="list-hint">Marking as read…</span>
                 ) : unread ? (
-                  <span className="list-hint">{href ? 'Mark as read and open Reports' : 'Mark as read'}</span>
+                  <span className="list-hint">{href ? `Mark as read and open ${place}` : 'Mark as read'}</span>
                 ) : href ? (
-                  <span className="list-hint">Open Reports</span>
+                  <span className="list-hint">Open {place}</span>
                 ) : null}
               </span>
             );

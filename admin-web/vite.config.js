@@ -57,6 +57,8 @@ export default defineConfig(({ mode }) => {
     root,
     envPrefix: 'VITE_',
     plugins: [react(), adminBuildGuard(env)],
+    // Shown as "Built" in Settings (owner 2026-11-06): the console's version is its build date.
+    define: { __ADMIN_BUILD_DATE__: JSON.stringify(new Date().toISOString().slice(0, 10)) },
     build: { outDir: 'dist', emptyOutDir: true, sourcemap: false },
     server: { port: 5174, strictPort: true },
     preview: { port: 4174, strictPort: true, headers: vercelHeaders() },

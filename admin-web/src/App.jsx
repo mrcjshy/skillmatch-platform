@@ -3,7 +3,9 @@ import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useLocation } 
 
 import { AuthProvider } from './auth.jsx';
 import { useAuth } from './auth-context.js';
-import { IconBell, IconClients, IconClose, IconDashboard, IconFlag, IconIdCard, IconMenu, IconWorker } from './icons.jsx';
+import { IconBell, IconClients, IconClose, IconDashboard, IconFlag, IconIdCard, IconMenu, IconSettings, IconWorker } from './icons.jsx';
+import { LiveNotificationsProvider } from './live.jsx';
+import { useLiveNotifications } from './live-context.js';
 import { ConfirmDialog, Status } from './ui.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Directory from './pages/Directory.jsx';
@@ -12,12 +14,14 @@ import IdReviews from './pages/IdReviews.jsx';
 import Notifications from './pages/Notifications.jsx';
 import ReportDetail from './pages/ReportDetail.jsx';
 import Reports from './pages/Reports.jsx';
+import Settings from './pages/Settings.jsx';
 import SignIn from './pages/SignIn.jsx';
 import UserDetail from './pages/UserDetail.jsx';
 
 /**
  * Routes. There is deliberately no sign-up, password-reset or role route:
  * this console serves existing active administrators only (D-006, RF-A).
+ * Settings lets a signed-in administrator change their own password (owner 2026-11-06).
  * Anything unknown falls through to "/", which the guard protects.
  */
 export default function App() {
@@ -27,7 +31,7 @@ export default function App() {
         <Routes>
           <Route path="/sign-in" element={<SignIn />} />
           <Route element={<RequireAdmin />}>
-            <Route element={<Shell />}>
+            <Route element={<LiveNotificationsProvider><Shell /></LiveNotificationsProvider>}>
               <Route index element={<Dashboard />} />
               <Route path="workers" element={<Directory key="worker" kind="worker" />} />
               <Route path="clients" element={<Directory key="client" kind="client" />} />
@@ -37,6 +41,7 @@ export default function App() {
               <Route path="reports" element={<Reports />} />
               <Route path="reports/:reportId" element={<ReportDetail />} />
               <Route path="notifications" element={<Notifications />} />
+              <Route path="settings" element={<Settings />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -94,6 +99,7 @@ const NAV = [
     ],
   },
   { group: 'Inbox', items: [['/notifications', 'Notifications', IconBell]] },
+  { group: 'Account', items: [['/settings', 'Settings', IconSettings]] },
 ];
 
 /** Itik's launcher tile: the same mark as the SkillMatch app icon and splash. */
@@ -107,6 +113,7 @@ function pageLabel(pathname) {
 
 function Shell() {
   const { email, signOutHere, signOutEverywhere } = useAuth();
+  const { unread } = useLiveNotifications();
   const location = useLocation();
   const mainRef = useRef(null);
   const firstRender = useRef(true);
@@ -202,6 +209,12 @@ function Shell() {
                     <NavLink to={to} end={to === '/'} className="nav-link" onClick={() => setNavOpen(false)}>
                       <NavIcon />
                       {label}
+                      {to === '/notifications' && unread > 0 ? (
+                        <span className="nav-badge">
+                          {unread > 99 ? '99+' : unread}
+                          <span className="visually-hidden"> unread</span>
+                        </span>
+                      ) : null}
                     </NavLink>
                   </li>
                 ))}

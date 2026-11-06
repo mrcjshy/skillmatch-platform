@@ -143,7 +143,24 @@ export function reportAttention(summary) {
  * ------------------------------------------------------------------ */
 
 export const DIRECTORY_PAGE_SIZE = 20;
-const DIR_WORKER_KEYS = ['user_id', 'full_name', 'is_active', 'created_at', 'has_profile', 'is_verified', 'availability_status'];
+// ADM-01 (owner 2026-11-06): the _v2 directory reads add strike_count to Worker rows and a status filter.
+const DIR_WORKER_KEYS = ['user_id', 'full_name', 'is_active', 'created_at', 'has_profile', 'is_verified', 'availability_status', 'strike_count'];
+
+/** Directory status filter values, sent as p_status. "Inactive" is banned or suspended at three strikes. */
+export const DIRECTORY_STATUSES = [
+  ['all', 'All'],
+  ['active', 'Active'],
+  ['inactive', 'Inactive'],
+];
+
+export function readDirectoryStatus(value) {
+  return DIRECTORY_STATUSES.some(([key]) => key === value) ? value : 'all';
+}
+
+/** "1 of 3" for a Worker with a profile; null when there is no profile yet. */
+export function strikeLabel(item) {
+  return item.has_profile && Number.isSafeInteger(item.strike_count) ? `${item.strike_count} of 3` : null;
+}
 const DIR_CLIENT_KEYS = ['user_id', 'full_name', 'is_active', 'created_at'];
 
 export function prepareDirectorySearch(value) {
@@ -151,12 +168,13 @@ export function prepareDirectorySearch(value) {
   return { search, tooLong: [...search].length > 100 };
 }
 
-export function directoryEmptyMessage(page, kind, search) {
+export function directoryEmptyMessage(page, kind, search, status = 'all') {
   if (page.total_count > 0) {
     return page.page > 1 ? 'No items on this page. Go to the previous page.' : 'No items on this page.';
   }
   const title = kind === 'worker' ? 'workers' : 'clients';
-  return search ? `No ${title} match that name.` : `No ${title} found.`;
+  const which = status === 'active' ? `active ${title}` : status === 'inactive' ? `inactive ${title}` : title;
+  return search ? `No ${which} match that name.` : `No ${which} found.`;
 }
 
 export function parseDirectoryPage(data, kind) {
@@ -178,7 +196,8 @@ export function parseDirectoryPage(data, kind) {
         (kind === 'worker' && (typeof item.has_profile !== 'boolean' ||
           (item.is_verified !== null && typeof item.is_verified !== 'boolean') ||
           (item.availability_status !== null && typeof item.availability_status !== 'string') ||
-          (!item.has_profile && (item.is_verified !== null || item.availability_status !== null))))) {
+          (item.strike_count !== null && (!Number.isSafeInteger(item.strike_count) || item.strike_count < 0)) ||
+          (!item.has_profile && (item.is_verified !== null || item.availability_status !== null || item.strike_count !== null))))) {
       throw new InvalidResponse();
     }
   }
@@ -601,6 +620,10 @@ const NOTIFICATION_LABEL = {
   payment_received: 'Payment received',
   worker_verified: 'Profile verified',
   report_submitted: 'Report submitted',
+  // NTF-01 (owner 2026-11-06): Administrator alerts.
+  identity_submitted: 'ID submitted for review',
+  worker_registered: 'New Worker registered',
+  client_registered: 'New Client registered',
 };
 
 export const NOTIFICATION_COPY = {
@@ -629,5 +652,48 @@ export function parseNotifications(data) {
   }).filter((row) => row !== null);
 }
 
-/** Admin activation: a report notification opens the report list (rows carry no trusted report id). */
-export const notificationHref = (type) => (type === 'report_submitted' ? '/reports' : null);
+/**
+ * Admin activation: each alert opens its list (rows carry no trusted record id). NTF-01 adds ID
+ * reviews and the two directories.
+ */
+const NOTIFICATION_DESTINATIONS = {
+  report_submitted: ['/reports', 'Reports'],
+  identity_submitted: ['/id-reviews', 'ID reviews'],
+  worker_registered: ['/workers', 'Workers'],
+  client_registered: ['/clients', 'Clients'],
+};
+export const notificationHref = (type) => NOTIFICATION_DESTINATIONS[type]?.[0] ?? null;
+export const notificationDestination = (type) => NOTIFICATION_DESTINATIONS[type]?.[1] ?? null;
+
+/* ---------------- Settings (owner 2026-11-06) ---------------- */
+
+/** Same minimum as the app's password screens. */
+export const PASSWORD_MIN_LENGTH = 6;
+
+export const SETTINGS_COPY = {
+  notificationsIntro:
+    'New reports and ID reviews appear in Notifications here. Alerts on your phone come from the SkillMatch mobile app.',
+  passwordIntro: 'This changes the password you use to sign in here and in the SkillMatch app.',
+  passwordTooShort: `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`,
+  passwordMismatch: 'The two passwords do not match.',
+  passwordSaved: 'Your password was changed.',
+  passwordSame: 'Choose a password different from your current one.',
+  passwordWeak: 'Choose a stronger password.',
+  passwordReauth: 'For your security, sign out, sign in again, then change your password.',
+  passwordGeneric: "We couldn't change your password. Please try again.",
+};
+
+/** The message to show, or null when the new password can be sent. */
+export function checkNewPassword(password, confirm) {
+  if (typeof password !== 'string' || password.length < PASSWORD_MIN_LENGTH) return SETTINGS_COPY.passwordTooShort;
+  if (password !== confirm) return SETTINGS_COPY.passwordMismatch;
+  return null;
+}
+
+/** Plain wording for Supabase Auth password errors; raw backend text is never shown. */
+export function passwordErrorCopy(code) {
+  if (code === 'same_password') return SETTINGS_COPY.passwordSame;
+  if (code === 'weak_password') return SETTINGS_COPY.passwordWeak;
+  if (code === 'reauthentication_needed' || code === 'reauthentication_not_valid') return SETTINGS_COPY.passwordReauth;
+  return SETTINGS_COPY.passwordGeneric;
+}

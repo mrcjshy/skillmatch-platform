@@ -4,8 +4,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { loadDirectory } from '../api.js';
 import { useAuth } from '../auth-context.js';
 import {
-  availabilityLabel, directoryEmptyMessage, directoryRowStatus, formatDateTime, prepareDirectorySearch,
-  workerVerificationStatus,
+  DIRECTORY_STATUSES, availabilityLabel, directoryEmptyMessage, directoryRowStatus, formatDateTime,
+  prepareDirectorySearch, readDirectoryStatus, strikeLabel, workerVerificationStatus,
 } from '../domain.js';
 import { Avatar, Chip, PageHeader, Status } from '../ui.jsx';
 
@@ -19,25 +19,26 @@ function readPage(value) {
   return Number.isSafeInteger(n) && n >= 1 ? n : 1;
 }
 
-/** Worker or Client directory: search by name, 20 per page (get_admin_*_directory). */
+/** Worker or Client directory: search by name, filter by status, 20 per page (get_admin_*_directory_v2). */
 export default function Directory({ kind }) {
   const { handleError } = useAuth();
   const title = kind === 'worker' ? 'Workers' : 'Clients';
   const [params, setParams] = useSearchParams();
   const search = (params.get('q') ?? '').trim();
   const page = readPage(params.get('page'));
+  const status = readDirectoryStatus(params.get('status'));
   const [draft, setDraft] = useState(search);
   const [reload, setReload] = useState(0);
   const [state, setState] = useState({ key: null, value: null, error: null });
 
-  const key = `${kind}|${search}|${page}|${reload}`;
+  const key = `${kind}|${search}|${status}|${page}|${reload}`;
   const prepared = prepareDirectorySearch(draft);
   const invalidSearch = prepareDirectorySearch(search).tooLong;
 
   useEffect(() => {
     if (invalidSearch) return undefined;
     let cancelled = false;
-    loadDirectory(kind, search, page)
+    loadDirectory(kind, search, page, status)
       .then((value) => { if (!cancelled) setState({ key, value, error: null }); })
       .catch(async (e) => {
         const outcome = await handleError(e);
@@ -48,16 +49,17 @@ export default function Directory({ kind }) {
         });
       });
     return () => { cancelled = true; };
-  }, [kind, search, page, key, invalidSearch, handleError]);
+  }, [kind, search, status, page, key, invalidSearch, handleError]);
 
   const current = state.key === key ? state : null;
   const loading = current === null && !invalidSearch;
   const result = current?.value ?? null;
   const totalPages = result ? Math.max(1, Math.ceil(result.total_count / result.page_size)) : 1;
 
-  function go(nextSearch, nextPage) {
+  function go(nextSearch, nextPage, nextStatus = status) {
     const next = new URLSearchParams();
     if (nextSearch) next.set('q', nextSearch);
+    if (nextStatus !== 'all') next.set('status', nextStatus);
     if (nextPage > 1) next.set('page', String(nextPage));
     setParams(next);
     setReload((n) => n + 1);
@@ -101,6 +103,24 @@ export default function Directory({ kind }) {
         </div>
       </form>
 
+      <fieldset className="filter">
+        <legend>Account status</legend>
+        <div className="segmented">
+          {DIRECTORY_STATUSES.map(([value, label]) => (
+            <label key={value} className="segment">
+              <input
+                type="radio"
+                name="directory-status"
+                value={value}
+                checked={status === value}
+                onChange={() => go(search, 1, value)}
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
+        <p className="muted filter-help">Inactive means banned by an Administrator or suspended at 3 no-show strikes.</p>
+      </fieldset>
       {invalidSearch ? <Status tone="error">Search must be 100 characters or fewer.</Status> : null}
       {loading ? <Status>Loading {title.toLowerCase()}…</Status> : null}
       {current?.error ? (
@@ -115,7 +135,7 @@ export default function Directory({ kind }) {
             {result.total_count} result{result.total_count === 1 ? '' : 's'} · Page {page} of {totalPages}
           </p>
           {result.items.length === 0 ? (
-            <Status tone="empty">{directoryEmptyMessage(result, kind, search)}</Status>
+            <Status tone="empty">{directoryEmptyMessage(result, kind, search, status)}</Status>
           ) : (
             <div className="card table-card">
               <div className="table-wrap">
@@ -125,6 +145,7 @@ export default function Directory({ kind }) {
                     <tr>
                       <th scope="col">Name</th>
                       <th scope="col">Status</th>
+                      {kind === 'worker' ? <th scope="col">Strikes</th> : null}
                       {kind === 'worker' ? <th scope="col" className="hide-sm">Availability</th> : null}
                       <th scope="col" className="hide-sm">Joined</th>
                     </tr>
@@ -145,6 +166,9 @@ export default function Directory({ kind }) {
                             </Link>
                           </td>
                           <td><Chip tone={chip.tone}>{chip.label}</Chip></td>
+                          {kind === 'worker' ? (
+                            <td className={item.strike_count >= 2 ? 'strong' : 'dim'}>{strikeLabel(item) ?? 'No profile'}</td>
+                          ) : null}
                           {kind === 'worker' ? (
                             <td className="dim hide-sm">{item.has_profile ? availabilityLabel(item.availability_status) : 'No profile'}</td>
                           ) : null}

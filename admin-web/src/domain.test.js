@@ -3,8 +3,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  DIRECTORY_STATUSES,
+  PASSWORD_MIN_LENGTH,
   PAYMENT_METHOD_KEYS,
   PAYMENT_METHOD_LABELS,
+  SETTINGS_COPY,
+  checkNewPassword,
+  directoryEmptyMessage,
+  notificationDestination,
+  notificationHref,
+  passwordErrorCopy,
+  readDirectoryStatus,
+  strikeLabel,
   allowedReviewStatuses,
   formatNotificationLabel,
   formatBirthDate,
@@ -70,7 +80,7 @@ test('parseAnalytics rejects a wrong row count, extra bucket key or negative cou
 
 const workerItem = {
   user_id: '11111111-1111-4111-8111-111111111111', full_name: 'Ana', is_active: true,
-  created_at: null, has_profile: true, is_verified: false, availability_status: 'available',
+  created_at: null, has_profile: true, is_verified: false, availability_status: 'available', strike_count: 1,
 };
 
 test('parseDirectoryPage validates page envelope and item keys', () => {
@@ -81,6 +91,27 @@ test('parseDirectoryPage validates page envelope and item keys', () => {
   assert.throws(() => parseDirectoryPage([{ total_count: 1, page: 1, page_size: 20, items: [], x: 1 }], 'worker'));
   assert.throws(() => parseDirectoryPage(
     [{ total_count: 1, page: 1, page_size: 20, items: [{ ...workerItem, has_profile: false }] }], 'worker'));
+  // ADM-01: strike_count is required on Worker rows, a non-negative integer, and null without a profile.
+  const { strike_count: _omit, ...v1Row } = workerItem;
+  assert.throws(() => parseDirectoryPage([{ total_count: 1, page: 1, page_size: 20, items: [v1Row] }], 'worker'));
+  assert.throws(() => parseDirectoryPage([{ total_count: 1, page: 1, page_size: 20, items: [{ ...workerItem, strike_count: -1 }] }], 'worker'));
+  assert.throws(() => parseDirectoryPage([{ total_count: 1, page: 1, page_size: 20, items: [{ ...workerItem, strike_count: '2' }] }], 'worker'));
+  const noProfile = { ...workerItem, has_profile: false, is_verified: null, availability_status: null, strike_count: null };
+  assert.equal(parseDirectoryPage([{ total_count: 1, page: 1, page_size: 20, items: [noProfile] }], 'worker').items.length, 1);
+  assert.throws(() => parseDirectoryPage([{ total_count: 1, page: 1, page_size: 20, items: [{ ...noProfile, strike_count: 0 }] }], 'worker'));
+});
+
+test('ADM-01 directory status filter and strike labels', () => {
+  assert.deepEqual(DIRECTORY_STATUSES.map(([key]) => key), ['all', 'active', 'inactive']);
+  assert.equal(readDirectoryStatus('inactive'), 'inactive');
+  assert.equal(readDirectoryStatus('banned'), 'all');
+  assert.equal(readDirectoryStatus(null), 'all');
+  assert.equal(strikeLabel(workerItem), '1 of 3');
+  assert.equal(strikeLabel({ ...workerItem, strike_count: 3 }), '3 of 3');
+  assert.equal(strikeLabel({ ...workerItem, has_profile: false, strike_count: null }), null);
+  assert.equal(directoryEmptyMessage({ total_count: 0, page: 1 }, 'worker', '', 'inactive'), 'No inactive workers found.');
+  assert.equal(directoryEmptyMessage({ total_count: 0, page: 1 }, 'client', 'Ana', 'active'), 'No active clients match that name.');
+  assert.equal(directoryEmptyMessage({ total_count: 0, page: 1 }, 'client', '', 'all'), 'No clients found.');
 });
 
 test('parseUserDetail returns null for no row and rejects a mismatched id', () => {
@@ -206,4 +237,35 @@ test('REG-01 profile formatting', () => {
   assert.equal(formatSkillExperience({ proficiency: 'beginner', years: 1 }), '1 year');
   assert.equal(formatSkillExperience({ proficiency: 'intermediate', years: null }), 'Not provided');
   assert.equal(formatSkillExperience({ proficiency: null, years: null }), 'Not provided');
+});
+
+test('Settings: new password rules match the app (owner, 2026-11-06)', () => {
+  assert.equal(PASSWORD_MIN_LENGTH, 6);
+  assert.equal(checkNewPassword('12345', '12345'), SETTINGS_COPY.passwordTooShort);
+  assert.equal(checkNewPassword('', ''), SETTINGS_COPY.passwordTooShort);
+  assert.equal(checkNewPassword(null, null), SETTINGS_COPY.passwordTooShort);
+  assert.equal(checkNewPassword('123456', '123457'), SETTINGS_COPY.passwordMismatch);
+  assert.equal(checkNewPassword('123456', '123456'), null);
+});
+
+test('Settings: Auth password errors get plain wording, never raw backend text', () => {
+  assert.equal(passwordErrorCopy('same_password'), SETTINGS_COPY.passwordSame);
+  assert.equal(passwordErrorCopy('weak_password'), SETTINGS_COPY.passwordWeak);
+  assert.equal(passwordErrorCopy('reauthentication_needed'), SETTINGS_COPY.passwordReauth);
+  assert.equal(passwordErrorCopy('reauthentication_not_valid'), SETTINGS_COPY.passwordReauth);
+  assert.equal(passwordErrorCopy('unexpected_failure'), SETTINGS_COPY.passwordGeneric);
+  assert.equal(passwordErrorCopy(null), SETTINGS_COPY.passwordGeneric);
+});
+
+test('NTF-01: Admin alerts have plain labels and open their lists', () => {
+  assert.equal(formatNotificationLabel('identity_submitted'), 'ID submitted for review');
+  assert.equal(formatNotificationLabel('worker_registered'), 'New Worker registered');
+  assert.equal(formatNotificationLabel('client_registered'), 'New Client registered');
+  assert.equal(notificationHref('report_submitted'), '/reports');
+  assert.equal(notificationHref('identity_submitted'), '/id-reviews');
+  assert.equal(notificationHref('worker_registered'), '/workers');
+  assert.equal(notificationHref('client_registered'), '/clients');
+  assert.equal(notificationDestination('identity_submitted'), 'ID reviews');
+  assert.equal(notificationHref('booking_confirmed'), null);
+  assert.equal(notificationDestination('unknown_type'), null);
 });

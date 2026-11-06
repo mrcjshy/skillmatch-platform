@@ -105,7 +105,8 @@ BEGIN
     AND c.convalidated;
 
   -- MOD-01 (2026-11-03) added account_reinstated as the tenth approved value.
-  PERFORM pg_temp.pass(1, 'notification type CHECK contains exactly the approved ten values',
+  -- NTF-01 (2026-11-06) added identity_submitted, worker_registered and client_registered.
+  PERFORM pg_temp.pass(1, 'notification type CHECK contains exactly the approved thirteen values',
     v_constraint IS NOT NULL
     AND v_constraint LIKE '%booking_request%'
     AND v_constraint LIKE '%booking_confirmed%'
@@ -117,9 +118,11 @@ BEGIN
     AND v_constraint LIKE '%payment_received%'
     AND v_constraint LIKE '%worker_verified%'
     AND v_constraint LIKE '%report_submitted%'
-    AND (
-      length(v_constraint) - length(replace(v_constraint, '::character varying', ''))
-    ) / length('::character varying') = 10,
+    AND v_constraint LIKE '%identity_submitted%'
+    AND v_constraint LIKE '%worker_registered%'
+    AND v_constraint LIKE '%client_registered%'
+    -- Each allowed value is one quoted literal followed by a cast.
+    AND (length(v_constraint) - length(replace(v_constraint, '''::', ''))) / length('''::') = 13,
     coalesce(v_constraint, 'missing'));
 
   PERFORM pg_temp.pass(2, 'booking submission exposes only Booking/category/description input',
@@ -363,6 +366,9 @@ BEGIN
     NOT EXISTS (
       SELECT 1 FROM public.notifications AS n
       WHERE n.user_id IN (admin_one, admin_two)
+        -- NTF-01 (2026-11-06): fixture accounts created after the Admins raise
+        -- registration alerts; this check is about report rows only.
+        AND n.type NOT IN ('worker_registered', 'client_registered', 'identity_submitted')
         AND (n.type IS DISTINCT FROM 'report_submitted'
           OR n.message IS DISTINCT FROM 'A new report needs Admin review.')
     ));

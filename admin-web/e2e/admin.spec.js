@@ -87,9 +87,17 @@ async function mockBackend(page, overrides = {}) {
     reportStatus: 'submitted',
     // MOD-01: the moderated Worker (PENDING_WORKER_ID) starts active with two strikes.
     moderation: { is_active: true, strike_count: 2, last_action: null, last_reason: null, last_action_at: null },
+    // Settings: the next PUT /auth/v1/user answers with this Auth error code (null = success).
+    passwordError: null,
+    // NTF-01: the Admin's unread count and notification rows.
+    unread: 0,
+    notifications: [],
     ...overrides,
   };
-  const seen = { requests: [], unexpected: [], foreign: [], cspViolations: [] };
+  const seen = { requests: [], unexpected: [], foreign: [], cspViolations: [], sockets: [] };
+
+  // NTF-01: the live channel. No server is attached, so nothing leaves the test; the URL is recorded.
+  await page.routeWebSocket(/\/realtime\/v1\/websocket/, (ws) => { seen.sockets.push(ws.url()); });
 
   page.on('console', (message) => {
     if (/Content Security Policy|Refused to/i.test(message.text())) seen.cspViolations.push(message.text());
@@ -110,7 +118,7 @@ async function mockBackend(page, overrides = {}) {
     const cors = {
       'access-control-allow-origin': '*',
       'access-control-allow-headers': (await request.headerValue('access-control-request-headers')) ?? '*',
-      'access-control-allow-methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+      'access-control-allow-methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'access-control-expose-headers': '*',
     };
     if (method === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
@@ -140,6 +148,22 @@ async function mockBackend(page, overrides = {}) {
       return email ? json(200, userJson(email)) : json(403, { code: 'bad_jwt', msg: 'invalid JWT' });
     }
     if (url.pathname === '/auth/v1/logout') return route.fulfill({ status: 204, headers: cors });
+    if (url.pathname === '/auth/v1/user' && method === 'PUT') {
+      const email = Object.keys(ACCOUNTS).find((e) => ACCOUNTS[e].id === caller);
+      if (!email) return json(403, { code: 'bad_jwt', msg: 'invalid JWT' });
+      if (state.passwordError) {
+        const code = state.passwordError;
+        state.passwordError = null;
+        return json(422, { code, error_code: code, msg: 'raw backend text that must not be shown' });
+      }
+      return json(200, userJson(email));
+    }
+
+    // ---- NTF-01 notifications: unread count (HEAD) and the list ----
+    if (url.pathname === '/rest/v1/notifications' && method === 'HEAD') {
+      return route.fulfill({ status: 200, headers: { ...cors, 'content-range': `*/${state.unread}` } });
+    }
+    if (url.pathname === '/rest/v1/notifications' && method === 'GET') return json(200, state.notifications);
 
     // ---- Own role row ----
     if (url.pathname === '/rest/v1/users' && method === 'GET') {
@@ -151,6 +175,14 @@ async function mockBackend(page, overrides = {}) {
     // ---- RPCs ----
     const rpc = url.pathname.startsWith('/rest/v1/rpc/') ? url.pathname.slice('/rest/v1/rpc/'.length) : null;
     if (rpc === 'get_admin_analytics_summary') return json(200, ANALYTICS);
+    if (rpc === 'get_admin_worker_directory_v2') {
+      // ADM-01: two Workers, one active with 1 strike and one suspended with 3; filtered by p_status.
+      const workers = [
+        { user_id: WORKER_ACCOUNT_ID, full_name: 'Ana Active', is_active: true, created_at: null, has_profile: true, is_verified: true, availability_status: 'available', strike_count: 1 },
+        { user_id: PENDING_WORKER_ID, full_name: 'Sol Suspended', is_active: false, created_at: null, has_profile: true, is_verified: true, availability_status: 'busy', strike_count: 3 },
+      ].filter((w) => body.p_status === 'all' || (body.p_status === 'active') === w.is_active);
+      return json(200, [{ total_count: workers.length, page: body.p_page, page_size: body.p_page_size, items: workers }]);
+    }
     if (rpc === 'list_workers_pending_id_review') return json(200, [{ ...PENDING, skills: ['Plumbing', 'Carpentry'] }]);
     if (rpc === 'get_worker_identity_for_review') return json(200, [state.identities?.[body.p_worker_user_id] ?? { ...PENDING, storage_path: STORAGE_PATH }]);
     if (rpc === 'approve_worker_identity') return json(state.approve.status, state.approve.body);
@@ -542,4 +574,89 @@ test('REG-01: Admin sees the full Worker resume on Worker details and on ID revi
   expect(rpcCalls(backend.seen, 'get_admin_account_profile').map((r) => r.body)).toEqual([
     { p_user_id: PENDING_WORKER_ID }, { p_user_id: PENDING_WORKER_ID },
   ]);
+});
+
+test('Settings: an admin changes their own password in place, with no email or reset route (owner, 2026-11-06)', async ({ page }) => {
+  await signInAsAdmin(page);
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  await expect(page.getByText('Alerts on your phone come from the SkillMatch mobile app.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open Notifications' })).toHaveAttribute('href', '/notifications');
+  await expect(page.getByText(/^Built$/)).toBeVisible();
+
+  const passwordPuts = () => backend.seen.requests.filter((r) => r.path === '/auth/v1/user' && r.method === 'PUT');
+  const submit = page.getByRole('button', { name: 'Change password' });
+
+  // Local rules first: nothing is sent.
+  await page.getByLabel('New password', { exact: true }).fill('12345');
+  await page.getByLabel('Confirm new password').fill('12345');
+  await submit.click();
+  await expect(page.getByRole('alert')).toHaveText('Password must be at least 6 characters.');
+  await page.getByLabel('New password', { exact: true }).fill('new-secret-1');
+  await page.getByLabel('Confirm new password').fill('new-secret-2');
+  await submit.click();
+  await expect(page.getByRole('alert')).toHaveText('The two passwords do not match.');
+  expect(passwordPuts()).toEqual([]);
+
+  // An Auth refusal gets plain wording, never the raw backend text.
+  backend.state.passwordError = 'same_password';
+  await page.getByLabel('Confirm new password').fill('new-secret-1');
+  await submit.click();
+  await expect(page.getByText('Choose a password different from your current one.')).toBeVisible();
+  await expect(page.getByText('raw backend text that must not be shown')).toHaveCount(0);
+
+  // Success: one PUT with only the password, then the fields clear.
+  await submit.click();
+  await expect(page.getByText('Your password was changed.')).toBeVisible();
+  await expect(page.getByLabel('New password', { exact: true })).toHaveValue('');
+  expect(passwordPuts().map((r) => r.body.password)).toEqual(['new-secret-1', 'new-secret-1']);
+  expect(passwordPuts().every((r) => !('email' in r.body) && !('data' in r.body))).toBe(true);
+  expect(backend.seen.requests.filter((r) => /\/auth\/v1\/(signup|recover|otp)/.test(r.path))).toEqual([]);
+});
+
+test('ADM-01: the Worker directory filters by account status and shows strikes', async ({ page }) => {
+  await signInAsAdmin(page);
+  await page.getByRole('link', { name: 'Workers' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Workers' })).toBeVisible();
+  const table = page.getByRole('table', { name: 'Workers' });
+  await expect(table.getByRole('columnheader', { name: 'Strikes' })).toBeVisible();
+  await expect(table.getByRole('row', { name: /Ana Active/ })).toContainText('1 of 3');
+  await expect(table.getByRole('row', { name: /Sol Suspended/ })).toContainText('3 of 3');
+
+  const filter = page.getByRole('group', { name: 'Account status' });
+  await expect(filter.getByRole('radio', { name: 'All' })).toBeChecked();
+  await filter.getByRole('radio', { name: 'Inactive' }).check();
+  await expect(page).toHaveURL(/\/workers\?status=inactive$/);
+  await expect(table.getByRole('row', { name: /Sol Suspended/ })).toBeVisible();
+  await expect(table.getByRole('row', { name: /Ana Active/ })).toHaveCount(0);
+
+  await filter.getByRole('radio', { name: 'Active', exact: true }).check();
+  await expect(table.getByRole('row', { name: /Ana Active/ })).toBeVisible();
+  await expect(table.getByRole('row', { name: /Sol Suspended/ })).toHaveCount(0);
+
+  // The page may re-read once while the session settles; the order of statuses requested is what matters.
+  const statuses = rpcCalls(backend.seen, 'get_admin_worker_directory_v2').map((r) => r.body.p_status);
+  expect(statuses.filter((s, i) => s !== statuses[i - 1])).toEqual(['all', 'inactive', 'active']);
+  expect(rpcCalls(backend.seen, 'get_admin_worker_directory')).toEqual([]);
+});
+
+test('NTF-01: the sidebar shows the unread count and a new ID alert opens ID reviews', async ({ page }) => {
+  backend.state.unread = 3;
+  backend.state.notifications = [
+    { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01', type: 'identity_submitted', message: 'A Worker submitted an ID for review.', is_read: true, created_at: '2026-11-06T02:00:00Z' },
+    { id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02', type: 'worker_registered', message: 'A new Worker account was created.', is_read: true, created_at: '2026-11-06T01:00:00Z' },
+  ];
+  await signInAsAdmin(page);
+  const link = page.getByRole('link', { name: 'Notifications 3 unread' });
+  await expect(link).toBeVisible();
+  await link.click();
+  await expect(page.getByText('ID submitted for review')).toBeVisible();
+  await expect(page.getByText('New Worker registered')).toBeVisible();
+  await expect(page.getByText('Open ID reviews')).toBeVisible();
+  await expect(page.getByText('Open Workers')).toBeVisible();
+  await page.getByRole('button', { name: /ID submitted for review/ }).click();
+  await expect(page).toHaveURL(/\/id-reviews$/);
+  // The live channel was opened against the project, not a third party.
+  expect(backend.seen.sockets.length).toBeGreaterThan(0);
+  expect(backend.seen.sockets.every((u) => u.startsWith('wss://admin-e2e.supabase.co/realtime/v1/websocket'))).toBe(true);
 });
