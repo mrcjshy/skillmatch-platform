@@ -219,8 +219,10 @@ BEGIN
 
   SELECT md5(pg_get_functiondef('public.list_my_job_opportunities()'::regprocedure))
     INTO v_hash;
+  -- NOSHOW-01 (owner 2026-11-06): the opportunity list leaves out Jobs whose time has passed;
+  -- compute_job_matches and the scoring are unchanged.
   PERFORM pg_temp.pass(10, 'list_my_job_opportunities fingerprint unchanged',
-    v_hash = 'a135ec4ddac213df3f3ef147f93e0fc9', v_hash);
+    v_hash = 'b09948ed8a4bd8e3a6ecf04664732d36', v_hash);
 
   v_def := pg_get_function_result('public.list_my_job_opportunities()'::regprocedure);
   PERFORM pg_temp.pass(11, 'opportunity RPC result type has no address/coordinates',

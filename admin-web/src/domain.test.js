@@ -19,7 +19,6 @@ import {
   formatNotificationLabel,
   formatBirthDate,
   formatHomeAddress,
-  formatSkillExperience,
   isUnread,
   moderationActionCopy,
   normaliseModerationReason,
@@ -232,11 +231,6 @@ test('REG-01 profile parser accepts exact Client and Worker objects only', () =>
 test('REG-01 profile formatting', () => {
   assert.equal(formatHomeAddress(regClient), '5 B. Morcilla, Brgy. Poblacion, Pateros, Metro Manila');
   assert.equal(formatBirthDate('1990-05-21', new Date('2026-11-03T04:00:00Z')), 'May 21, 1990 (age 36)');
-  // No skill level anywhere (owner, 2026-11-05): a stored level is ignored, years stay.
-  assert.equal(formatSkillExperience({ proficiency: 'expert', years: 7 }), '7 years');
-  assert.equal(formatSkillExperience({ proficiency: 'beginner', years: 1 }), '1 year');
-  assert.equal(formatSkillExperience({ proficiency: 'intermediate', years: null }), 'Not provided');
-  assert.equal(formatSkillExperience({ proficiency: null, years: null }), 'Not provided');
 });
 
 test('Settings: new password rules match the app (owner, 2026-11-06)', () => {

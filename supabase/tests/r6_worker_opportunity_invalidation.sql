@@ -186,9 +186,11 @@ BEGIN
   PERFORM pg_temp.check_case('matching function unchanged',
     md5(pg_get_functiondef('private.compute_job_matches(uuid)'::regprocedure))
       = 'b9b686e6b0b9a87ee8618b5600b1ed62');
+  -- NOSHOW-01 (owner 2026-11-06): the opportunity list leaves out Jobs whose time has passed;
+  -- compute_job_matches and the scoring are unchanged.
   PERFORM pg_temp.check_case('opportunity RPC unchanged',
     md5(pg_get_functiondef('public.list_my_job_opportunities()'::regprocedure))
-      = 'a135ec4ddac213df3f3ef147f93e0fc9');
+      = 'b09948ed8a4bd8e3a6ecf04664732d36');
 END;
 $$;
 

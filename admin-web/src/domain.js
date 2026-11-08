@@ -380,11 +380,6 @@ export function formatBirthDate(birthDate, today = new Date()) {
 }
 
 export const formatJobYears = (job) => `${job.start_year} – ${job.end_year ?? 'Present'}`;
-/** Years of experience only: skill levels (Beginner / Intermediate / Expert) are not shown (owner, 2026-11-05). */
-export function formatSkillExperience(skill) {
-  if (skill.years === null || skill.years === undefined) return 'Not provided';
-  return skill.years === 1 ? '1 year' : `${skill.years} years`;
-}
 
 export function workerVerificationStatus(worker) {
   if (!worker.has_profile) return { label: 'No profile', tone: 'neutral' };

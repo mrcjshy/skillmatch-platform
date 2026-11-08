@@ -562,8 +562,10 @@ test('REG-01: Admin sees the full Worker resume on Worker details and on ID revi
   await expect(resume.getByText('12 M. Almeda St., Brgy. San Roque, Pateros, Metro Manila')).toBeVisible();
   await expect(resume.getByText('maria@e2e.test')).toBeVisible();
   await expect(resume.getByText('Vocational / TESDA')).toBeVisible();
-  // Years of experience only: the stored skill level is never shown (owner, 2026-11-05).
-  await expect(resume.getByText('6 years', { exact: true })).toBeVisible();
+  // Skill names only: no years of experience (owner, 2026-11-06) and no skill level (2026-11-05).
+  await expect(resume.getByRole('heading', { name: 'Skills', exact: true })).toBeVisible();
+  await expect(resume.getByText('Plumbing', { exact: true })).toBeVisible();
+  await expect(resume.getByText(/\d+ years?\b/)).toHaveCount(0);
   await expect(resume.getByText(/Beginner|Intermediate|Expert/)).toHaveCount(0);
   await expect(resume.getByText('Carpenter · ABC Builders')).toBeVisible();
   await expect(resume.getByText('2018 – Present')).toBeVisible();

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { loadAccountProfile } from './api.js';
 import { useAuth } from './auth-context.js';
 import {
-  EDUCATION_LABELS, formatBirthDate, formatHomeAddress, formatJobYears, formatSkillExperience,
+  EDUCATION_LABELS, formatBirthDate, formatHomeAddress, formatJobYears,
 } from './domain.js';
 import { Status } from './ui.jsx';
 
@@ -83,9 +83,9 @@ export function ProfileCard({ userId }) {
                   ['Highest education', p.education_level ? EDUCATION_LABELS[p.education_level] : null],
                   ...(p.school_name ? [['School', p.school_name]] : []),
                 ]} />
-                <h3 className="subhead">Skills and experience</h3>
+                <h3 className="subhead">Skills</h3>
                 {p.skills.length
-                  ? <Rows rows={p.skills.map((s) => [s.name, formatSkillExperience(s)])} />
+                  ? <ul className="skill-list">{p.skills.map((s, index) => <li key={index}>{s.name}</li>)}</ul>
                   : <p className="muted">No skills added.</p>}
                 <h3 className="subhead">Work history</h3>
                 {p.work_history.length

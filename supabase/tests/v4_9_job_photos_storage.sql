@@ -339,13 +339,15 @@ BEGIN
     NOT pg_temp.can_select(client_other, path_booked_1));
   PERFORM pg_temp.pass(22, 'pre-match unrelated Worker SELECT denied',
     NOT pg_temp.can_select(worker_unrelated, path_booked_1));
-  PERFORM pg_temp.pass(23, 'matched-only Worker without Booking SELECT denied',
+  -- PHO-01 (owner, 2026-11-06): a Worker who matches an open Job may see its photos before
+  -- accepting it. This assertion required the opposite before PHO-01.
+  PERFORM pg_temp.pass(23, 'matched-only Worker without Booking SELECT allowed on an open Job (PHO-01)',
     pg_temp.has_opportunity(worker_matched, job_open)
       AND NOT EXISTS (
         SELECT 1 FROM public.bookings AS b
         WHERE b.worker_id = worker_matched AND b.job_id = job_open
       )
-      AND NOT pg_temp.can_select(worker_matched, path_open_1),
+      AND pg_temp.can_select(worker_matched, path_open_1),
     'eligible=' || pg_temp.has_opportunity(worker_matched, job_open)
       || ' photo_visible=' || pg_temp.can_select(worker_matched, path_open_1));
 

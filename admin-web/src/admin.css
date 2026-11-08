@@ -320,6 +320,10 @@ main:focus { outline: none; }
 .fact dd { font-weight: 600; overflow-wrap: anywhere; }
 /* REG-01 resume card subheadings. */
 .subhead { font-size: var(--fs-body); font-weight: 700; margin: 14px 0 2px; }
+/* REG-03 resume skills: names only, one per row (years of experience removed, owner 2026-11-06). */
+.skill-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.skill-list li { padding: 9px 0; border-top: 1px solid var(--rule); overflow-wrap: anywhere; }
+.skill-list li:first-child { border-top: 0; }
 /* MOD-01 no-show strike meter: label, "N of 3", three pips filled in the negative colour. */
 .strike-meter { display: flex; align-items: center; gap: 12px; padding: 9px 0; }
 .strike-label { color: var(--muted); flex: 1; }

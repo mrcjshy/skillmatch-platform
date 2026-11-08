@@ -360,8 +360,10 @@ BEGIN
     v_hash = '3da08e1ce3b7b7089ff51285a7c33dae', v_hash);
   SELECT md5(pg_get_functiondef('public.list_my_job_opportunities()'::regprocedure))
     INTO v_hash;
+  -- NOSHOW-01 (owner 2026-11-06): the opportunity list leaves out Jobs whose time has passed;
+  -- compute_job_matches and the scoring are unchanged.
   PERFORM pg_temp.pass(18, 'list_my_job_opportunities fingerprint unchanged',
-    v_hash = 'a135ec4ddac213df3f3ef147f93e0fc9', v_hash);
+    v_hash = 'b09948ed8a4bd8e3a6ecf04664732d36', v_hash);
 
   SELECT private.location_points('Santa Ana', 'Pateros', 'Santa Ana', 'Pateros') INTO v_count;
   PERFORM pg_temp.pass(19, 'location_points still 30 for same barangay+city',
